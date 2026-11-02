@@ -1,0 +1,568 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>캠퍼스 지도</title>
+<meta name="description" content="전국 4년제 대학 231곳을 실제 지형과 건물 3D 위에서 찾아보는 예비 대학생용 지도">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&family=Nanum+Myeongjo:wght@700;800&display=swap">
+<style>
+/* Layout: 왼쪽은 브이월드 실사 3D 지도, 오른쪽은 색인(검색·목록·학교 카드). 휴대폰에서는 위아래로 쌓음. */
+:root{
+  --paper:#EBEFEA; --land:#F9FAF6; --land-hi:#E3EDE6; --ink:#1B252E; --muted:#5B686D; --line:#BFC9C5; --panel:#F6F8F4;
+  --accent:#1E6B62; --accent-ink:#FFFFFF;
+  --pin-pub:#2C4C9C; --pin-pri:#3F454B; --pin-edu:#A8721A; --pin-sci:#76399C;
+  --shadow:0 1px 2px rgba(20,30,35,.08),0 6px 20px rgba(20,30,35,.08);
+  --f-display:"Nanum Myeongjo","Noto Serif KR","Apple SD Gothic Neo",serif;
+  --f-body:"IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;
+  --f-mono:"IBM Plex Mono",ui-monospace,Menlo,Consolas,monospace;
+  color-scheme:light;
+}
+@media (prefers-color-scheme: dark){:root{
+  --paper:#11171B; --land:#1B242A; --land-hi:#21312E; --ink:#E5ECE9; --muted:#93A19E; --line:#2E3B40; --panel:#151C20;
+  --accent:#55B6A8; --accent-ink:#0B1513;
+  --pin-pub:#7E9BEA; --pin-pri:#B9C1C6; --pin-edu:#E0A846; --pin-sci:#C08BE6;
+  --shadow:0 1px 2px rgba(0,0,0,.3),0 8px 24px rgba(0,0,0,.35); color-scheme:dark}}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--paper);color:var(--ink);font-family:var(--f-body);font-size:15px;line-height:1.55;overflow:hidden}
+button{font:inherit;color:inherit}
+:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.app{height:100%;display:grid;grid-template-columns:minmax(0,1fr) 400px;grid-template-rows:auto minmax(0,1fr)}
+header.top{grid-column:1/-1;display:flex;align-items:baseline;gap:14px;flex-wrap:wrap;padding-block:calc(10px + env(safe-area-inset-top,0px)) 9px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));border-bottom:1px solid var(--line)}
+header.top h1{font-family:var(--f-display);font-weight:800;font-size:1.4rem;margin:0}
+header.top .sub{color:var(--muted);font-size:.85rem}
+header.top .sub b{color:var(--ink);font-weight:600;font-variant-numeric:tabular-nums}
+.mapwrap{position:relative;min-width:0;min-height:0;background:#cfdbe0;overflow:hidden}
+#vmap{position:absolute;inset:0}
+.mapbtns{position:absolute;left:calc(12px + env(safe-area-inset-left,0px));top:12px;display:flex;gap:6px;flex-wrap:wrap;z-index:5}
+.mapbtns button{border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:6px 11px;font-size:.8rem;box-shadow:var(--shadow);cursor:pointer}
+.mapbtns button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
+.legend{position:absolute;left:calc(12px + env(safe-area-inset-left,0px));bottom:34px;z-index:5;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:7px 10px;font-size:.74rem;display:grid;grid-template-columns:auto auto;gap:3px 12px;box-shadow:var(--shadow)}
+.legend span{display:flex;align-items:center;gap:6px;white-space:nowrap}
+.dot{width:9px;height:9px;border-radius:50%;display:inline-block;flex:none}
+.dot.ring3{background:transparent;border:2px solid var(--accent)}
+aside.panel{min-width:0;min-height:0;display:flex;flex-direction:column;background:var(--panel);border-left:1px solid var(--line)}
+.controls{padding-block:12px 10px;padding-left:16px;padding-right:max(16px,env(safe-area-inset-right,0px));display:grid;gap:10px;border-bottom:1px solid var(--line)}
+.search{display:flex;align-items:center;gap:8px;border:1px solid var(--line);background:var(--land);border-radius:10px;padding:0 10px}
+.search input{flex:1;min-width:0;border:0;background:transparent;padding:9px 0;font:inherit;color:var(--ink);outline:none}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{border:1px solid var(--line);background:transparent;border-radius:99px;padding:3px 11px;font-size:.8rem;cursor:pointer}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--panel);border-color:var(--ink)}
+.chip.three[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)}
+.scroll{overflow-y:auto;min-height:0;flex:1}
+.count{font-size:.78rem;color:var(--muted);padding:8px 16px 4px;font-variant-numeric:tabular-nums}
+ul.list{list-style:none;margin:0;padding:0 8px 16px}
+ul.list li button{width:100%;text-align:left;border:0;background:transparent;padding:8px;border-radius:8px;display:grid;grid-template-columns:10px minmax(0,1fr) auto;gap:2px 10px;align-items:center;cursor:pointer}
+ul.list li button:hover{background:var(--land)}
+ul.list li button[aria-current="true"]{background:var(--land-hi)}
+.lname{font-weight:600;font-size:.92rem;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.lmeta{grid-column:2;font-size:.75rem;color:var(--muted)}
+.badge{grid-row:1/3;grid-column:3;font-size:.68rem;font-weight:600;color:var(--accent);border:1px solid var(--accent);border-radius:5px;padding:0 5px}
+.card{margin:12px 12px 4px;padding:16px;border:1px solid var(--line);background:var(--land);border-radius:12px;display:grid;gap:10px}
+.card .kicker{font-size:.72rem;letter-spacing:.06em;color:var(--muted)}
+.card h2{font-family:var(--f-display);font-weight:800;font-size:1.35rem;margin:0;line-height:1.25;text-wrap:balance}
+.card dl{margin:0;display:grid;grid-template-columns:auto minmax(0,1fr);gap:4px 14px;font-size:.84rem}
+.card dt{color:var(--muted)}
+.card dd{margin:0}
+.card a{color:var(--accent)}
+.mono{font-family:var(--f-mono);font-size:.8rem;font-variant-numeric:tabular-nums}
+.card .feat{font-size:.86rem;line-height:1.6;border-top:1px dashed var(--line);padding-top:10px}
+.actions{display:flex;flex-wrap:wrap;gap:8px}
+.btn{border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:7px 12px;font-size:.84rem;cursor:pointer;text-decoration:none;color:var(--ink)!important;display:inline-flex;align-items:center;gap:6px}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:var(--accent-ink)!important;font-weight:600}
+.note{font-size:.75rem;color:var(--muted)}
+.foot{padding:10px 16px 18px;font-size:.72rem;color:var(--muted);border-top:1px solid var(--line)}
+.setup{position:absolute;inset:0;z-index:20;display:grid;place-items:center;padding:16px;background:var(--paper)}
+.setup .box{max-width:520px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:20px;box-shadow:var(--shadow);display:grid;gap:10px;font-size:.9rem}
+.setup h2{font-family:var(--f-display);font-weight:800;font-size:1.2rem;margin:0}
+.setup ol{margin:0;padding-left:1.2em;display:grid;gap:4px}
+.setup code{font-family:var(--f-mono);font-size:.8rem;background:var(--land);border:1px solid var(--line);border-radius:5px;padding:0 4px;word-break:break-all}
+@media (max-width:820px){
+  body{overflow:auto}
+  .app{height:auto;min-height:100%;grid-template-columns:minmax(0,1fr);grid-template-rows:auto 62vh auto}
+  aside.panel{border-left:0;border-top:1px solid var(--line)}
+  .scroll{overflow:visible}
+  .legend{font-size:.68rem;bottom:30px}
+}
+</style>
+<script src="config.js"></script>
+<script>
+  window.KEY_OK = typeof window.VWORLD_KEY === 'string' && /^[0-9A-Fa-f-]{30,}$/.test(window.VWORLD_KEY.trim());
+  if (window.KEY_OK) {
+    document.write('<script src="https://map.vworld.kr/js/webglMapInit.js.do?version=3.0&apiKey=' + encodeURIComponent(window.VWORLD_KEY.trim()) + '"><\/script>');
+  }
+</script>
+</head>
+<body>
+<div class="app">
+  <header class="top">
+    <h1>캠퍼스 지도</h1>
+    <span class="sub">전국 4년제 대학 <b id="total">0</b>곳 · 실제 지형과 건물 3D</span>
+  </header>
+  <div class="mapwrap">
+    <div id="vmap"></div>
+    <div class="mapbtns">
+      <button id="bAll">전국 보기</button>
+      <button id="bOrbit" aria-pressed="false" disabled>한 바퀴 돌기</button>
+      <button id="bTop" disabled>위에서 보기</button>
+    </div>
+    <div class="legend" aria-label="범례">
+      <span><i class="dot" style="background:var(--pin-pub)"></i>국공립</span>
+      <span><i class="dot" style="background:var(--pin-pri)"></i>사립</span>
+      <span><i class="dot" style="background:var(--pin-edu)"></i>교육대</span>
+      <span><i class="dot" style="background:var(--pin-sci)"></i>과학기술원·특화</span>
+      <span style="grid-column:1/-1"><i class="dot ring3"></i>상징물 해설 있음</span>
+    </div>
+    <div class="setup" id="setup" hidden>
+      <div class="box">
+        <h2 id="setupTitle">브이월드 인증키를 넣어 주세요</h2>
+        <div id="setupBody"></div>
+      </div>
+    </div>
+  </div>
+  <aside class="panel">
+    <div class="controls">
+      <label class="search" for="q">
+        <svg width="16" height="16" viewBox="0 0 24 24" aria-hidden="true"><circle cx="11" cy="11" r="7" fill="none" stroke="currentColor" stroke-width="2"/><path d="M20 20l-4-4" stroke="currentColor" stroke-width="2" fill="none"/></svg>
+        <input id="q" type="search" placeholder="대학 이름이나 지역 검색 (예: 순천, 교육대)" autocomplete="off">
+      </label>
+      <div class="chips" id="regions" role="group" aria-label="권역"></div>
+      <div class="chips" id="types" role="group" aria-label="유형"></div>
+    </div>
+    <div class="scroll" id="scroll">
+      <div id="cardslot"></div>
+      <div class="count" id="count"></div>
+      <ul class="list" id="list"></ul>
+      <div class="foot">
+        위치: 교육부 「대학교 주소기반 좌표정보」(공공데이터포털, 2025.11.26 갱신). 3D 지도: 국토교통부 브이월드. 운영 중인 4년제 대학·교육대·산업대·과학기술원과 분교·추가 캠퍼스를 실었고, 사이버대학과 사내대학은 뺐습니다. 좌표는 학교 대표 주소 기준이라 캠퍼스 정문과 조금 다를 수 있습니다.
+      </div>
+    </div>
+  </aside>
+</div>
+
+<script>
+const RAW = `국립강릉원주@~~강원~U~N~37.766~128.870~강릉시
+국립강릉원주@~2~강원~U~N~37.305~127.922~원주시
+강원@~~강원~U~N~37.868~127.748~춘천시
+강원@~2~강원~U~N~37.451~129.160~삼척시
+경북@~~대구~U~N~35.889~128.614~북구
+경상국립@~~경남~U~N~35.157~128.098~진주시
+국립공주@~~충남~U~N~36.467~127.139~공주시
+국립군산@~~전북~U~N~35.950~126.680~군산시
+국립금오공과@~~경북~U~N~36.146~128.388~구미시
+국립목포@~~전남~U~N~34.910~126.440~무안군
+국립목포해양@~~전남~U~N~34.790~126.366~목포시
+국립부경@~~부산~U~N~35.131~129.105~남구
+부산@~~부산~U~N~35.232~129.084~금정구
+서울@~~서울~U~C~37.468~126.959~관악구
+국립순천@~~전남~U~N~34.967~127.481~순천시
+국립경국@~~경북~U~N~36.541~128.798~안동시
+전남@~~광주~U~N~35.173~126.901~북구
+전남@~2~전남~U~N~34.773~127.701~여수시
+전북@~~전북~U~N~35.841~127.132~전주시
+제주@~~제주~U~N~33.457~126.564~제주시
+국립창원@~~경남~U~N~35.247~128.692~창원시
+충남@~~대전~U~N~36.368~127.342~유성구
+충북@~~충북~U~N~36.630~127.455~청주시
+한국교원@~~충북~U~N~36.606~127.357~청주시
+한국체육@~~서울~U~N~37.520~127.132~송파구
+국립한국해양@~~부산~U~N~35.074~129.087~영도구
+국립한국교통@~~충북~U~N~36.969~127.873~충주시
+서울과학기술@~~서울~U~N~37.633~127.077~노원구
+한경국립@~~경기~U~N~37.010~127.264~안성시
+국립한밭@~~대전~U~N~36.345~127.305~유성구
+서울시립@~~서울~U~P~37.583~127.060~동대문구
+가톨릭@~~경기~U~S~37.488~126.799~부천시
+가톨릭@~2~서울~U~S~37.502~127.006~서초구
+가톨릭@~3~서울~U~S~37.585~127.005~종로구
+감리교신학@~~서울~U~S~37.568~126.962~서대문구
+강남@~~경기~U~S~37.274~127.132~용인시
+건국@~~서울~U~S~37.539~127.075~광진구
+건국@(글로컬)~B~충북~U~S~36.949~127.912~충주시
+건양@~~충남~U~S~36.182~127.110~논산시
+건양@~2~대전~U~S~36.308~127.343~서구
+경기@~~경기~U~S~37.298~127.033~수원시
+경기@~2~서울~U~S~37.565~126.962~서대문구
+경남@~~경남~U~S~35.184~128.555~창원시
+경동@~~강원~U~S~38.252~128.557~고성군
+대구한의@~~경북~U~S~35.794~128.777~경산시
+경성@~~부산~U~S~35.138~129.100~남구
+가천@~~경기~U~S~37.451~127.129~성남시
+경일@~~경북~U~S~35.911~128.802~경산시
+신경주@~~경북~U~S~35.829~129.163~경주시
+경희@~~서울~U~S~37.594~127.055~동대문구
+계명@~~대구~U~S~35.854~128.481~달서구
+고려@~~서울~U~S~37.586~127.031~성북구
+고려@(세종)~B~세종~U~S~36.612~127.291~조치원읍
+고신@~~부산~U~S~35.079~129.062~영도구
+가톨릭관동@~~강원~U~S~37.737~128.874~강릉시
+광신@~~광주~U~S~35.216~126.885~북구
+광운@~~서울~U~S~37.619~127.058~노원구
+광주가톨릭@~~전남~U~S~35.015~126.864~나주시
+광주여자@~~광주~U~S~35.163~126.796~광산구
+국민@~~서울~U~S~37.610~126.999~성북구
+강서@~~서울~U~S~37.549~126.854~강서구
+극동@~~충북~U~S~37.128~127.642~음성군
+나사렛@~~충남~U~S~36.798~127.119~천안시
+단국@~~경기~U~S~37.321~127.133~용인시
+대구@~~경북~U~S~35.905~128.843~경산시
+대구예술@~~경북~U~S~36.031~128.508~칠곡군
+대구가톨릭@~~경북~U~S~35.909~128.807~경산시
+세한@~~전남~U~S~34.745~126.483~영암군
+대신@~~경북~U~S~35.804~128.745~경산시
+대전가톨릭@~~세종~U~S~36.655~127.197~전의면
+대전@~~대전~U~S~36.337~127.459~동구
+대진@~~경기~U~S~37.874~127.158~포천시
+서울기독@~~서울~U~S~37.601~126.912~은평구
+덕성여자@~~서울~U~S~37.650~127.016~도봉구
+동국@~~서울~U~S~37.559~126.999~중구
+동국@(WISE)~B~경북~U~S~35.865~129.191~경주시
+동덕여자@~~서울~U~S~37.607~127.041~성북구
+동서@~~부산~U~S~35.146~129.007~사상구
+동신@~~전남~U~S~35.050~126.718~나주시
+동아@~~부산~U~S~35.119~128.968~사하구
+동양@~~경북~U~S~36.886~128.530~영주시
+동의@~~부산~U~S~35.144~129.036~부산진구
+루터@~~경기~U~S~37.264~127.113~용인시
+명지@~~경기~U~S~37.222~127.190~용인시
+명지@~2~서울~U~S~37.580~126.921~서대문구
+목원@~~대전~U~S~36.329~127.337~서구
+배재@~~대전~U~S~36.323~127.366~서구
+부산가톨릭@~~부산~U~S~35.245~129.097~금정구
+부산외국어@~~부산~U~S~35.266~129.081~금정구
+삼육@~~서울~U~S~37.643~127.109~노원구
+상명@~~서울~U~S~37.604~126.955~종로구
+상지@~~강원~U~S~37.369~127.930~원주시
+서강@~~서울~U~S~37.551~126.943~마포구
+서경@~~서울~U~S~37.615~127.014~성북구
+서울신학@~~경기~U~S~37.478~126.790~부천시
+서울여자@~~서울~U~S~37.629~127.089~노원구
+서울장신@~~경기~U~S~37.409~127.245~광주시
+서원@~~충북~U~S~36.626~127.482~청주시
+선문@~~충남~U~S~36.801~127.076~아산시
+성결@~~경기~U~S~37.380~126.929~안양시
+성공회@~~서울~U~S~37.488~126.826~구로구
+성균관@~~서울~U~S~37.587~126.993~종로구
+성신여자@~~서울~U~S~37.592~127.022~성북구
+세명@~~충북~U~S~37.174~128.196~제천시
+세종@~~서울~U~S~37.552~127.073~광진구
+수원가톨릭@~~경기~U~S~37.196~126.933~화성시
+수원@~~경기~U~S~37.210~126.979~화성시
+숙명여자@~~서울~U~S~37.545~126.965~용산구
+순천향@~~충남~U~S~36.771~126.934~아산시
+숭실@~~서울~U~S~37.496~126.955~동작구
+신라@~~부산~U~S~35.172~128.998~사상구
+아신@~~경기~U~S~37.511~127.429~양평군
+아주@~~경기~U~S~37.283~127.044~수원시
+안양@~~경기~U~S~37.392~126.921~안양시
+안양@~2~인천~U~S~37.712~126.445~강화군
+연세@~~서울~U~S~37.564~126.943~서대문구
+연세@(미래)~B~강원~U~S~37.275~127.904~원주시
+영남@~~경북~U~S~35.830~128.752~경산시
+영남신학@~~경북~U~S~35.881~128.816~경산시
+유원@~~충북~U~S~36.196~127.799~영동군
+영산선학@~~전남~U~S~35.327~126.441~영광군
+용인@~~경기~U~S~37.228~127.171~용인시
+우석@~~전북~U~S~35.912~127.068~완주군
+울산@~~울산~U~S~35.542~129.258~남구
+원광@~~전북~U~S~35.972~126.960~익산시
+위덕@~~경북~U~S~36.016~129.283~경주시
+을지@~~대전~U~S~36.333~127.406~중구
+을지@~2~경기~U~S~37.461~127.165~성남시
+이화여자@~~서울~U~S~37.564~126.950~서대문구
+인제@~~경남~U~S~35.253~128.901~김해시
+인제@~2~부산~U~S~35.146~129.021~부산진구
+인천가톨릭@~2~인천~U~S~37.373~126.663~연수구
+인천가톨릭@~~인천~U~S~37.657~126.450~강화군
+인하@~~인천~U~S~37.451~126.652~미추홀구
+장로회신학@~~서울~U~S~37.550~127.103~광진구
+전주@~~전북~U~S~35.816~127.089~전주시
+조선@~~광주~U~S~35.146~126.934~동구
+중부@~~충남~U~S~36.192~127.449~금산군
+중앙@~2~경기~U~S~37.000~127.229~안성시
+중앙@~~서울~U~S~37.505~126.954~동작구
+중앙승가@~~경기~U~S~37.607~126.709~김포시
+백석@~~충남~U~S~36.839~127.183~천안시
+청주@~~충북~U~S~36.651~127.495~청주시
+총신@~~서울~U~S~37.488~126.967~동작구
+추계예술@~~서울~U~S~37.563~126.954~서대문구
+한국침례신학@~~대전~U~S~36.385~127.323~유성구
+칼빈@~~경기~U~S~37.305~127.129~용인시
+평택@~~경기~U~S~36.995~127.134~평택시
+차의과학@~~경기~U~S~37.856~127.138~포천시
+포항공과@~~경북~U~S~36.013~129.327~포항시
+한국기술교육@~~충남~U~S~36.765~127.281~천안시
+한국성서@~~서울~U~S~37.649~127.064~노원구
+한국외국어@~~서울~U~S~37.598~127.058~동대문구
+한국항공@~~경기~U~S~37.599~126.864~고양시
+한남@~~대전~U~S~36.353~127.423~대덕구
+한동@~~경북~U~S~36.102~129.389~포항시
+한라@~~강원~U~S~37.304~127.907~원주시
+한림@~~강원~U~S~37.885~127.735~춘천시
+한서@~~충남~U~S~36.691~126.587~서산시
+한성@~~서울~U~S~37.583~127.010~성북구
+한세@~~경기~U~S~37.344~126.954~군포시
+한신@~~경기~U~S~37.192~127.028~오산시
+한양@~~서울~U~S~37.555~127.047~성동구
+한양@(ERICA)~B~경기~U~S~37.298~126.834~안산시
+서울한영@~~서울~U~S~37.497~126.851~구로구
+한일장신@~~전북~U~S~35.764~127.206~완주군
+협성@~~경기~U~S~37.213~126.954~화성시
+호남@~~광주~U~S~35.150~126.765~광산구
+호남신학@~~광주~U~S~35.140~126.911~남구
+호서@~~충남~U~S~36.734~127.077~아산시
+홍익@~~서울~U~S~37.553~126.925~마포구
+가톨릭꽃동네@~~충북~U~S~36.522~127.403~청주시
+남부@~~광주~U~S~35.209~126.842~광산구
+예원예술@~~전북~U~S~35.648~127.271~임실군
+예원예술@~2~경기~U~S~37.847~127.037~양주시
+목포가톨릭@~~전남~U~S~34.827~126.419~목포시
+부산장신@~~경남~U~S~35.256~128.862~김해시
+금강@~~충남~U~S~36.307~127.190~논산시
+예수@~~전북~U~S~35.816~127.135~전주시
+광주@~~광주~U~S~35.106~126.896~남구
+화성의과학@~~경기~U~S~37.203~126.840~화성시
+동명@~~부산~U~S~35.125~129.101~남구
+대전신학@~~대전~U~S~36.351~127.424~대덕구
+중원@~~충북~U~S~36.819~127.798~괴산군
+우송@~~대전~U~S~36.336~127.446~동구
+김천@~~경북~U~S~36.139~128.082~김천시
+송원@~~광주~U~S~35.108~126.873~남구
+경운@~~경북~U~S~36.167~128.468~구미시
+남서울@~~충남~U~S~36.911~127.144~천안시
+초당@~~전남~U~S~34.980~126.470~무안군
+한국공학@~~경기~U~S~37.340~126.734~시흥시
+제주국제@~~제주~U~S~33.443~126.570~제주시
+창신@~~경남~U~S~35.245~128.600~창원시
+울산과학기술원~~울산~U~L~35.577~129.188~울주군
+공주교육@~~충남~E~N~36.445~127.120~공주시
+광주교육@~~광주~E~N~35.165~126.926~북구
+대구교육@~~대구~E~N~35.851~128.588~남구
+부산교육@~~부산~E~N~35.196~129.077~연제구
+서울교육@~~서울~E~N~37.491~127.015~서초구
+경인교육@~~인천~E~N~37.536~126.717~계양구
+경인교육@~2~경기~E~N~37.436~126.917~안양시
+전주교육@~~전북~E~N~35.809~127.154~전주시
+진주교육@~~경남~E~N~35.186~128.068~진주시
+청주교육@~~충북~E~N~36.615~127.484~청주시
+춘천교육@~~강원~E~N~37.859~127.749~춘천시
+호원@~~전북~I~S~35.968~126.864~군산시
+청운@~~충남~I~S~36.582~126.665~홍성군
+순복음총회신학교~~충북~X~S~36.904~128.168~제천시
+한국과학기술원~~대전~U~L~36.368~127.357~유성구
+광주과학기술원~~광주~U~L~35.227~126.843~북구
+대구경북과학기술원~~대구~U~L~35.706~128.455~달성군
+한국예술종합학교~~서울~X~K~37.606~127.054~성북구
+경동@~2~강원~U~S~38.192~128.551~속초시
+경동@~3~강원~U~S~37.265~127.792~원주시
+인천@~~인천~U~C~37.378~126.633~연수구
+신한@~~경기~U~S~37.904~127.038~동두천시
+단국@~2~충남~U~S~36.836~127.165~천안시
+경동@~4~경기~U~S~37.809~127.070~양주시
+가야@(김해)~~경남~U~S~35.270~128.872~김해시
+가야@(고령)~2~경북~U~S~35.719~128.250~고령군
+신한@~2~경기~U~S~37.710~127.046~의정부시
+을지@~3~경기~U~S~37.753~127.052~의정부시
+홍익@~2~세종~U~S~36.620~127.288~조치원읍
+상명@~2~충남~U~S~36.831~127.181~천안시
+한국전통문화@~~충남~U~K~36.308~126.897~부여군
+한국에너지공과@~~전남~U~L~35.011~126.804~나주시
+영산@(해운대)~~부산~U~S~35.224~129.159~해운대구
+영산@(양산)~2~경남~U~S~35.428~129.145~양산시
+국립창원@(거창캠퍼스)~2~경남~U~N~35.673~127.912~거창군
+국립창원@(남해캠퍼스)~3~경남~U~N~34.837~127.898~남해군
+국립목포@(담양캠퍼스)~2~전남~U~N~35.327~126.993~담양군`;
+const CAMPUS={'':'본교','B':'분교','2':'제2캠퍼스','3':'제3캠퍼스','4':'제4캠퍼스'};
+const TYPE={U:'대학교',E:'교육대학',I:'산업대학',X:'각종학교·기타'};
+const EST={N:'국립',C:'국립대학법인',P:'공립',S:'사립',K:'특별법 국립',L:'특별법 법인'};
+const REGION_GROUP={서울:'서울',경기:'경기·인천',인천:'경기·인천',강원:'강원',충북:'충청',충남:'충청',대전:'충청',세종:'충청',전북:'전라',전남:'전라',광주:'전라',경북:'경상',경남:'경상',대구:'경상',부산:'경상',울산:'경상',제주:'제주'};
+const PROV_OF={서울:'서울특별시',경기:'경기도',인천:'인천광역시',강원:'강원특별자치도',충북:'충청북도',충남:'충청남도',대전:'대전광역시',세종:'세종특별자치시',전북:'전북특별자치도',전남:'전라남도',광주:'광주광역시',경북:'경상북도',경남:'경상남도',대구:'대구광역시',부산:'부산광역시',울산:'울산광역시',제주:'제주특별자치도'};
+const COLORS={pub:'#2C4C9C',pri:'#3F454B',edu:'#A8721A',sci:'#76399C'};
+function group(u){ if(u.t==='E') return 'edu'; if(u.e==='L') return 'sci'; if(u.e==='S') return 'pri'; return 'pub'; }
+const UNIS = RAW.trim().split('\n').map((line,i)=>{
+  const [n,b,r,t,e,lat,lon,city]=line.split('~');
+  const name=n.replace('@','대학교');
+  const u={i,name,base:name.replace(/\(.*\)$/,''),b,r,t,e,lat:+lat,lon:+lon,city};
+  u.g=group(u); return u;
+});
+const FEAT = {
+ '서울대학교|':{blurb:'관악산 북쪽 자락의 움푹한 땅에 자리 잡은 캠퍼스입니다. 정문 조형물은 ‘국립 서울 대학교’의 초성 ㄱ·ㅅ·ㄷ을 겹친 모양이라 학생들이 ‘샤’라고 부르고, 학교 안내서는 이를 진리를 찾는 열쇠로 설명합니다.', src:'서울대 안내서(2019), 세계일보 건축 연재'},
+ '연세대학교|':{blurb:'정문에서 보행자 전용 길인 백양로를 따라가면 끝에 언더우드관이 서 있습니다. 1920년대 헨리 머피가 설계한 고딕 양식 석조 건물로, 5층 높이 중앙탑이 백양로 축과 맞춰져 있고 좌우에 스팀슨관과 아펜젤러관이 섭니다. 세 건물 모두 사적입니다.', src:'한국교육시설학회지(2012), 국가기록원'},
+ '고려대학교|':{blurb:'정문을 들어서면 넓은 중앙광장이 펼쳐지고 정면에 본관이 보입니다. 본관은 1934년 박동진이 설계한 고딕풍 석조 건물로 사적이며, 문기둥에 호랑이 상이 새겨져 있습니다.', src:'고려대 경영대 소식(2007), 대학저널(2015)'},
+ '이화여자대학교|':{blurb:'옛 운동장 자리를 계곡처럼 깊게 파고 양옆에 공간을 넣은 지하 캠퍼스 ECC가 상징입니다. 프랑스 건축가 도미니크 페로가 설계해 2008년 준공했고, 가운데 큰 계단 양쪽 둔덕 위는 정원입니다.', src:'서울시 건축 산책, 헤럴드경제(2026)'},
+ '한국과학기술원|':{blurb:'정문은 높이 10.7m 화강석 타워 두 개가 마주 선 조형물로, 각각 과학과 기술을 뜻합니다. 캠퍼스 안 오리연못(원래 이름 석림지)에는 2000년 무렵부터 오리와 거위가 살며 마스코트가 됐습니다.', src:'KAIST 누리집 UI·상징물'},
+ '포항공과대학교|':{blurb:'본관 옆 노벨동산은 1989년 학교 심포지엄에 온 노벨상 수상자들이 기념식수를 하면서 생긴 이름입니다. 강의동과 기숙사 사이에는 78계단이 있고, 2019년 그 옆에 해동78타워가 들어섰습니다.', src:'서울신문(1992), 경북매일(2019)'},
+ '부산대학교|':{blurb:'정문으로 이어지는 넉넉한터는 학생과 시민이 함께 쓰는 광장입니다. 1977년 세운 높이 12.4m 십자형 시계탑은 2007년 철거됐다가, 개교 80주년인 2026년 동문·시민 기부로 다시 세워졌습니다.', src:'대학저널(2026.3, 2026.7)'},
+ '경북대학교|':{blurb:'캠퍼스 한가운데 연못 일청담은 기금을 낸 하영수의 호를 딴 이름입니다. 경북대 교화인 감꽃 모양을 형상화했고, 분수와 함께 학생과 주민의 쉼터가 됩니다.', src:'대학저널(2016), 매일신문(2023)'},
+ '전남대학교|':{blurb:'용봉탑은 1978년 학생들이 모금해 세운 높이 13.63m 상징탑입니다. 화강석 좌대 셋은 교시 진리·창조·봉사를, 휘감아 오르는 청동 기둥은 승천하는 용을 나타내고, 꼭대기 봉황은 바람 따라 도는 모빌입니다. 1957년 지은 옛 본부 용봉관은 지금 역사관입니다.', src:'대학저널(2020, 2012)'},
+ '조선대학교|':{blurb:'온통 흰색인 본관은 길이 375m로 ‘동양에서 가장 긴 건물’로 기네스북에 올랐습니다. 1947년 착공해 1954년 완공한 7층 건물이 처음 모습이고, 이후 양옆으로 이어 늘렸습니다.', src:'TV리포트, 조선대 공학기술논문지(2017)'},
+ '제주대학교|':{blurb:'아라캠퍼스 진입로는 제주 왕벚나무 길로 이름난 봄 명소입니다. 맑은 날에는 벚꽃과 잔디 너머로 한라산 능선이 함께 보입니다.', src:'제주 관광 기사(네이트 여행)'},
+ '한국에너지공과대학교|':{blurb:'나주 빛가람혁신도시에 2022년 문을 연 에너지 특화 대학입니다. 소수 정예 기숙형 대학을 표방하며, 다목적 광장을 중심으로 캠퍼스를 단계적으로 짓고 있습니다.', src:'서울신문(2021), 뉴시스(2023), 세계일보(2026)'}
+};
+UNIS.forEach(u=>{ const f=FEAT[u.name+'|'+u.b]; if(f) u.f=f; });
+
+/* ---------- list & filters ---------- */
+const REGIONS=['전체','서울','경기·인천','강원','충청','전라','경상','제주'];
+const TYPES=[['all','모든 유형'],['pub','국공립'],['pri','사립'],['edu','교육대'],['sci','과학기술원·특화'],['f','상징물 해설']];
+let fRegion='전체',fType='all',q='',selected=null,filtered=[];
+const regEl=document.getElementById('regions'),typEl=document.getElementById('types');
+REGIONS.forEach(r=>{const b=document.createElement('button');b.className='chip';b.textContent=r;b.setAttribute('aria-pressed',r===fRegion);b.onclick=()=>{fRegion=r;[...regEl.children].forEach(c=>c.setAttribute('aria-pressed',c===b));update(true);};regEl.appendChild(b);});
+TYPES.forEach(([k,l])=>{const b=document.createElement('button');b.className='chip'+(k==='f'?' three':'');b.textContent=l;b.setAttribute('aria-pressed',k===fType);b.onclick=()=>{fType=k;[...typEl.children].forEach(c=>c.setAttribute('aria-pressed',c===b));update(false);};typEl.appendChild(b);});
+document.getElementById('q').addEventListener('input',e=>{q=e.target.value.trim();update(false);});
+function matches(u){
+  if(fRegion!=='전체'&&REGION_GROUP[u.r]!==fRegion)return false;
+  if(fType==='f'){if(!u.f)return false;}else if(fType!=='all'&&u.g!==fType)return false;
+  if(q){const hay=[u.name,u.r,u.city,CAMPUS[u.b],EST[u.e],TYPE[u.t],PROV_OF[u.r]].join(' ').replace(/\s/g,'');const q1=q.replace(/\s/g,''),q2=q1.replace(/대$/,'대학교');if(!hay.includes(q1)&&!hay.includes(q2))return false;}
+  return true;
+}
+const listEl=document.getElementById('list'),countEl=document.getElementById('count');
+function update(flyRegion){
+  const qn=q.replace(/\s/g,'');const nm=u=>qn&&u.name.replace(/\s/g,'').includes(qn)?1:0;
+  filtered=UNIS.filter(matches).sort((a,b)=>(nm(b)-nm(a))||(!!b.f-!!a.f)||a.name.localeCompare(b.name,'ko')||a.b.localeCompare(b.b));
+  const set=new Set(filtered.map(u=>u.i));
+  MAP.setVisible(set);
+  countEl.textContent=`${filtered.length}곳`+(fRegion!=='전체'?` · ${fRegion}`:'')+(q?` · “${q}” 검색`:'');
+  listEl.textContent='';
+  filtered.forEach(u=>{const li=document.createElement('li');const b=document.createElement('button');
+    b.innerHTML=`<i class="dot" style="background:var(--pin-${u.g})"></i><span class="lname"></span>${u.f?'<span class="badge">해설</span>':''}<span class="lmeta"></span>`;
+    b.querySelector('.lname').textContent=u.name+(u.b?' · '+CAMPUS[u.b]:'');
+    b.querySelector('.lmeta').textContent=`${u.r} ${u.city} · ${EST[u.e]}${u.t!=='U'?' '+TYPE[u.t]:''}`;
+    if(u.i===selected)b.setAttribute('aria-current','true');
+    b.onclick=()=>select(u.i,false);li.appendChild(b);listEl.appendChild(li);});
+  if(flyRegion){ if(fRegion==='전체') MAP.home(); else if(filtered.length) MAP.fitTo(filtered); }
+}
+function esc(s){return String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));}
+function select(i,fromMap){
+  selected=i;const u=UNIS[i];
+  const siblings=UNIS.filter(v=>v.base===u.base&&v.i!==u.i);
+  const kakao=`https://map.kakao.com/link/map/${encodeURIComponent(u.name)},${u.lat},${u.lon}`;
+  const naver=`https://map.naver.com/p/search/${encodeURIComponent(u.name+(u.b&&!/\(/.test(u.name)?' '+CAMPUS[u.b]:''))}`;
+  const slot=document.getElementById('cardslot');
+  slot.innerHTML=`<article class="card" aria-live="polite">
+    <div class="kicker">${esc(PROV_OF[u.r]||u.r)} ${esc(u.city)}</div>
+    <h2>${esc(u.name)}</h2>
+    <dl>
+      <dt>캠퍼스</dt><dd>${esc(CAMPUS[u.b])}</dd>
+      <dt>설립</dt><dd>${esc(EST[u.e])}</dd>
+      <dt>학제</dt><dd>${esc(TYPE[u.t])}</dd>
+      <dt>좌표</dt><dd class="mono">${u.lat.toFixed(3)}°N ${u.lon.toFixed(3)}°E</dd>
+      ${siblings.length?`<dt>다른 캠퍼스</dt><dd>${siblings.map(s=>`<a href="#" data-go="${s.i}" class="sib">${esc(s.city)} ${esc(CAMPUS[s.b])}</a>`).join(' · ')}</dd>`:''}
+    </dl>
+    ${u.f?`<div class="feat">${esc(u.f.blurb)}<div class="note" style="margin-top:6px">출처: ${esc(u.f.src)}</div></div>`:''}
+    <div class="actions">
+      <button class="btn primary" id="goFly">캠퍼스로 날아가기</button>
+      <a class="btn" href="${kakao}" target="_blank" rel="noopener">카카오맵</a>
+      <a class="btn" href="${naver}" target="_blank" rel="noopener">네이버 지도</a>
+    </div>
+  </article>`;
+  slot.querySelectorAll('.sib').forEach(a=>a.onclick=e=>{e.preventDefault();select(+a.dataset.go,false);});
+  slot.querySelector('#goFly').onclick=()=>MAP.flyToUni(u);
+  MAP.highlight(u);
+  if(!fromMap) MAP.flyToUni(u);
+  update(false);
+  if(window.innerWidth<=820){ if(!fromMap) window.scrollTo({top:0,behavior:'smooth'}); else slot.scrollIntoView({behavior:'smooth',block:'start'}); }
+  else document.getElementById('scroll').scrollTop=0;
+}
+
+/* ---------- 3D map (V-World WebGL 3.0, Cesium-based) ---------- */
+const MAP = (()=>{
+  let viewer=null, ents=[], selEnt=null, orbitOn=false, orbitCenter=null, orbitRemove=null, pending=[];
+  const api={ready:false};
+  const run=f=>api.ready?f():pending.push(f);
+  function C(){return window.Cesium;}
+  function addEntities(){
+    const Ce=C();
+    ents=UNIS.map(u=>{
+      const col=Ce.Color.fromCssColorString(COLORS[u.g]);
+      return viewer.entities.add({
+        id:'uni-'+u.i,
+        position:Ce.Cartesian3.fromDegrees(u.lon,u.lat),
+        point:{pixelSize:u.f?13:10,color:col,outlineColor:u.f?Ce.Color.fromCssColorString('#1E6B62'):Ce.Color.WHITE,outlineWidth:u.f?4:2,
+          heightReference:Ce.HeightReference.CLAMP_TO_GROUND,disableDepthTestDistance:Number.POSITIVE_INFINITY},
+        label:{text:u.name.replace('대학교','대')+(u.b?' '+CAMPUS[u.b]:''),font:'600 14px "IBM Plex Sans KR","Apple SD Gothic Neo","Malgun Gothic",sans-serif',
+          fillColor:Ce.Color.fromCssColorString('#1B252E'),outlineColor:Ce.Color.WHITE,outlineWidth:4,style:Ce.LabelStyle.FILL_AND_OUTLINE,
+          verticalOrigin:Ce.VerticalOrigin.BOTTOM,pixelOffset:new Ce.Cartesian2(0,-12),heightReference:Ce.HeightReference.CLAMP_TO_GROUND,
+          distanceDisplayCondition:new Ce.DistanceDisplayCondition(0,u.f?120000:45000),disableDepthTestDistance:Number.POSITIVE_INFINITY}
+      });
+    });
+    const h=new Ce.ScreenSpaceEventHandler(viewer.scene.canvas);
+    h.setInputAction(m=>{const p=viewer.scene.pick(m.position);if(p&&p.id&&typeof p.id.id==='string'&&p.id.id.startsWith('uni-')){select(+p.id.id.slice(4),true);}},Ce.ScreenSpaceEventType.LEFT_CLICK);
+    h.setInputAction(()=>stopOrbit(),Ce.ScreenSpaceEventType.LEFT_DOWN);
+  }
+  function stopOrbit(){
+    if(!orbitOn)return;orbitOn=false;document.getElementById('bOrbit').setAttribute('aria-pressed','false');
+    if(orbitRemove){orbitRemove();orbitRemove=null;}
+    viewer.camera.lookAtTransform(C().Matrix4.IDENTITY);
+  }
+  api.init=function(){
+    const Ce=C();viewer=window.ws3d&&window.ws3d.viewer;
+    if(!viewer||!Ce){return false;}
+    api.ready=true;addEntities();
+    document.getElementById('bOrbit').disabled=false;document.getElementById('bTop').disabled=false;
+    pending.splice(0).forEach(f=>f());
+    return true;
+  };
+  api.setVisible=set=>run(()=>ents.forEach((e,i)=>e.show=set.has(i)));
+  api.highlight=u=>run(()=>{const Ce=C();if(selEnt){selEnt.point.pixelSize=selEnt._ps;selEnt.label.distanceDisplayCondition=selEnt._dd;}selEnt=ents[u.i];selEnt._ps=selEnt.point.pixelSize;selEnt._dd=selEnt.label.distanceDisplayCondition;selEnt.point.pixelSize=18;selEnt.label.distanceDisplayCondition=new Ce.DistanceDisplayCondition(0,1e7);orbitCenter=u;});
+  api.flyToUni=u=>run(()=>{stopOrbit();const Ce=C();orbitCenter=u;
+    // oblique view from the south: 650m up, 35° down, about 930m back
+    viewer.camera.flyTo({destination:Ce.Cartesian3.fromDegrees(u.lon,u.lat-0.0084,650),orientation:{heading:0,pitch:Ce.Math.toRadians(-35),roll:0},duration:2.4});});
+  api.home=()=>run(()=>{stopOrbit();const Ce=C();viewer.camera.flyTo({destination:Ce.Cartesian3.fromDegrees(127.75,35.9,850000),orientation:{heading:0,pitch:Ce.Math.toRadians(-90),roll:0},duration:2});});
+  api.fitTo=list=>run(()=>{stopOrbit();const Ce=C();const lons=list.map(u=>u.lon),lats=list.map(u=>u.lat);const pad=.08;
+    viewer.camera.flyTo({destination:Ce.Rectangle.fromDegrees(Math.min(...lons)-pad,Math.min(...lats)-pad,Math.max(...lons)+pad,Math.max(...lats)+pad),duration:2});});
+  api.top=()=>run(()=>{stopOrbit();const Ce=C();const u=orbitCenter;if(!u)return;viewer.camera.flyTo({destination:Ce.Cartesian3.fromDegrees(u.lon,u.lat,1400),orientation:{heading:0,pitch:Ce.Math.toRadians(-90),roll:0},duration:1.6});});
+  api.orbit=()=>run(()=>{const Ce=C();const u=orbitCenter;if(!u)return;if(orbitOn){stopOrbit();return;}
+    orbitOn=true;document.getElementById('bOrbit').setAttribute('aria-pressed','true');
+    const center=Ce.Cartesian3.fromDegrees(u.lon,u.lat,40);let heading=viewer.camera.heading;
+    viewer.camera.lookAt(center,new Ce.HeadingPitchRange(heading,Ce.Math.toRadians(-30),1100));
+    const reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+    orbitRemove=viewer.clock.onTick.addEventListener(()=>{heading+=reduce?0.0008:0.0022;viewer.camera.lookAt(center,new Ce.HeadingPitchRange(heading,Ce.Math.toRadians(-30),1100));});
+  });
+  return api;
+})();
+document.getElementById('bAll').onclick=()=>MAP.home();
+document.getElementById('bOrbit').onclick=()=>{if(!MAP.ready){return;}if(selected==null){showToastPick();return;}MAP.orbit();};
+document.getElementById('bTop').onclick=()=>{if(selected==null){showToastPick();return;}MAP.top();};
+function showToastPick(){countEl.textContent='먼저 목록이나 지도에서 학교를 고르세요.';setTimeout(()=>update(false),2200);}
+
+function showSetup(kind){
+  const s=document.getElementById('setup');s.hidden=false;
+  const host=location.origin&&location.origin!=='null'?location.origin:'(이 사이트 주소)';
+  if(kind==='nokey'){
+    document.getElementById('setupTitle').textContent='브이월드 인증키를 넣어 주세요';
+    document.getElementById('setupBody').innerHTML=`<p>실제 지형과 건물 3D는 국토교통부 브이월드 지도를 씁니다. 무료 인증키 하나만 있으면 됩니다.</p>
+    <ol><li>vworld.kr 에 가입하고 <b>오픈API → 인증키 발급</b>을 엽니다.</li>
+    <li>서비스 URL에 이 사이트 주소 <code>${esc(host)}</code> 를 적고, 활용할 API 목록에서 <b>3D 지도(WebGL)</b> 항목을 고릅니다.</li>
+    <li>받은 키를 <code>config.js</code> 파일의 따옴표 안에 붙여 넣고 다시 올립니다.</li></ol>
+    <p class="note">키가 없어도 오른쪽 목록과 검색, 학교 카드는 그대로 쓸 수 있습니다.</p>`;
+  } else {
+    document.getElementById('setupTitle').textContent='3D 지도를 불러오지 못했습니다';
+    document.getElementById('setupBody').innerHTML=`<p>인증키는 들어 있지만 브이월드가 응답하지 않았습니다. 가장 흔한 원인은 키를 발급할 때 적은 서비스 URL이 지금 주소 <code>${esc(host)}</code> 와 다른 경우입니다.</p>
+    <ol><li>vworld.kr <b>마이페이지 → 인증키 관리</b>에서 서비스 URL을 확인하고 지금 주소로 고칩니다.</li>
+    <li>인터넷 연결과 브라우저의 광고 차단 기능을 확인합니다.</li>
+    <li>고친 뒤 새로고침합니다.</li></ol>`;
+  }
+}
+
+document.getElementById('total').textContent=UNIS.length;
+update(false);
+(function boot(){
+  if(!window.KEY_OK){showSetup('nokey');return;}
+  if(typeof window.vw==='undefined'){showSetup('fail');return;}
+  try{
+    const map=new vw.Map();
+    map.setOption({mapId:'vmap',initPosition:new vw.CameraPosition(new vw.CoordZ(127.75,35.9,850000),new vw.Direction(0,-90,0)),logo:true,navigation:true});
+    map.start();
+  }catch(e){console.error(e);showSetup('fail');return;}
+  let tries=0;
+  const tryInit=()=>{ if(MAP.ready)return; if(MAP.init())return; if(++tries>150){showSetup('fail');return;} setTimeout(tryInit,200); };
+  vw.ws3dInitCallBack=tryInit;
+  tryInit();
+})();
+</script>
+</body>
+</html>
