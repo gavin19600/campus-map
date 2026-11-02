@@ -511,7 +511,7 @@ const MAP = (()=>{
   api.flyToUni=u=>run(()=>{stopOrbit();const Ce=C();orbitCenter=u;
     // oblique view from the south: 650m up, 35° down, about 930m back
     viewer.camera.flyTo({destination:Ce.Cartesian3.fromDegrees(u.lon,u.lat-0.0084,650),orientation:{heading:0,pitch:Ce.Math.toRadians(-35),roll:0},duration:2.4});});
-  api.home=()=>run(()=>{stopOrbit();const Ce=C();viewer.camera.flyTo({destination:Ce.Cartesian3.fromDegrees(127.9,31.9,430000),orientation:{heading:0,pitch:Ce.Math.toRadians(-42),roll:0},duration:2.2});});
+  api.home=()=>run(()=>{stopOrbit();const Ce=C();viewer.camera.flyTo({destination:Ce.Cartesian3.fromDegrees(127.85,34.05,240000),orientation:{heading:0,pitch:Ce.Math.toRadians(-48),roll:0},duration:2.2});});
   api.fitTo=list=>run(()=>{stopOrbit();const Ce=C();const lons=list.map(u=>u.lon),lats=list.map(u=>u.lat);
     // tilted view of the region: camera south of the group, looking north at 45°
     const cLon=(Math.min(...lons)+Math.max(...lons))/2,cLat=(Math.min(...lats)+Math.max(...lats))/2;
@@ -559,7 +559,7 @@ update(false);
   if(typeof window.vw==='undefined'){showSetup('fail');return;}
   try{
     const map=new vw.Map();
-    map.setOption({mapId:'vmap',initPosition:new vw.CameraPosition(new vw.CoordZ(127.9,31.9,430000),new vw.Direction(0,-42,0)),logo:true,navigation:true});
+    map.setOption({mapId:'vmap',initPosition:new vw.CameraPosition(new vw.CoordZ(127.85,34.05,240000),new vw.Direction(0,-48,0)),logo:true,navigation:true});
     map.start();
   }catch(e){console.error(e);showSetup('fail');return;}
   let tries=0;
