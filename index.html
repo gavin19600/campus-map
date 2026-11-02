@@ -78,7 +78,7 @@ ul.list li button[aria-current="true"]{background:var(--land-hi)}
 .foot{padding:10px 16px 18px;font-size:.72rem;color:var(--muted);border-top:1px solid var(--line)}
 .walkhud{position:absolute;left:0;right:0;bottom:calc(30px + env(safe-area-inset-bottom,0px));z-index:6;display:flex;justify-content:space-between;align-items:flex-end;gap:12px;padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px));pointer-events:none}
 .walkhud > *{pointer-events:auto}
-.pad{display:grid;grid-template-columns:repeat(3,52px);grid-template-rows:repeat(2,52px);gap:6px}
+.pad{display:grid;grid-template-columns:repeat(4,52px);grid-template-rows:repeat(2,52px);gap:6px}
 .pad button{border:1px solid var(--line);background:color-mix(in srgb,var(--panel) 88%,transparent);border-radius:12px;font-size:1.2rem;box-shadow:var(--shadow);cursor:pointer;touch-action:none;user-select:none;-webkit-user-select:none}
 .pad button:active,.pad button.on{background:var(--accent);color:var(--accent-ink)}
 .walkinfo{background:color-mix(in srgb,var(--panel) 92%,transparent);border:1px solid var(--line);border-radius:12px;padding:8px 12px;font-size:.78rem;box-shadow:var(--shadow);display:grid;gap:6px;max-width:260px}
@@ -129,24 +129,26 @@ ul.list li button[aria-current="true"]{background:var(--land-hi)}
       <span><i class="dot" style="background:var(--pin-sci)"></i>과학기술원·특화</span>
       <span style="grid-column:1/-1"><i class="dot ring3"></i>상징물 해설 있음</span>
     </div>
-    <div class="walkhint" id="walkhint" hidden>끌어서 둘러보기 · W/↑ 앞 · S/↓ 뒤 · A/D 옆걸음 · Q/E 회전 · Shift 달리기</div>
+    <div class="walkhint" id="walkhint" hidden>끌어서 둘러보기 · W/↑ 앞 · S/↓ 뒤 · A/D 옆으로 · Q/E 회전 · R/F 높이 · Shift 빠르게</div>
     <div class="walkhud" id="walkhud" hidden>
       <div class="walkinfo">
-        <b id="walkname">캠퍼스 걷기</b>
-        <span class="note">화면을 끌면 고개를 돌립니다. 건물은 브이월드 실사 3D입니다.</span>
+        <b id="walkname">캠퍼스 탐방</b>
+        <span class="note">화면을 끌면 고개를 돌립니다. 높이를 낮추면 건물에 가까이 갈 수 있어요.</span>
         <div class="row">
-          <button id="wRun" aria-pressed="false">달리기</button>
+          <button id="wRun" aria-pressed="false">빠르게</button>
           <button id="wUp">하늘에서 보기</button>
-          <button id="wExit">걷기 끝내기</button>
+          <button id="wExit">탐방 끝내기</button>
         </div>
       </div>
       <div class="pad" aria-label="이동 버튼">
+        <button data-k="up" aria-label="높이 올리기">⇡</button>
         <button data-k="turnL" aria-label="왼쪽으로 돌기">↺</button>
         <button data-k="fwd" aria-label="앞으로">▲</button>
         <button data-k="turnR" aria-label="오른쪽으로 돌기">↻</button>
-        <button data-k="left" aria-label="왼쪽 옆걸음">◀</button>
+        <button data-k="down" aria-label="높이 낮추기">⇣</button>
+        <button data-k="left" aria-label="왼쪽으로 이동">◀</button>
         <button data-k="back" aria-label="뒤로">▼</button>
-        <button data-k="right" aria-label="오른쪽 옆걸음">▶</button>
+        <button data-k="right" aria-label="오른쪽으로 이동">▶</button>
       </div>
     </div>
     <div class="setup" id="setup" hidden>
@@ -486,7 +488,7 @@ function select(i,fromMap){
     </dl>
     ${u.f?`<div class="feat">${esc(u.f.blurb)}<div class="note" style="margin-top:6px">출처: ${esc(u.f.src)}</div></div>`:''}
     <div class="actions">
-      <button class="btn primary" id="goWalk">걸어서 탐방하기</button>
+      <button class="btn primary" id="goWalk">캠퍼스 탐방하기</button>
       <button class="btn" id="goFly">하늘에서 보기</button>
       <a class="btn" href="${kakao}" target="_blank" rel="noopener">카카오맵</a>
       <a class="btn" href="${naver}" target="_blank" rel="noopener">네이버 지도</a>
@@ -571,31 +573,33 @@ function showToastPick(){countEl.textContent='먼저 목록이나 지도에서 �
 /* ---------- walk mode: eye-level exploration among V-World 3D buildings ---------- */
 const WALK=(()=>{
   const w={on:false};window.WALK=w;
-  const EYE=1.7, R_E=6378137;
+  const R_E=6378137, ALT_MIN=50, ALT_MAX=600;
+  let alt=180;
   let lon=0,lat=0,ground=0,heading=0,pitch=0,run=false,keys={},raf=null,last=0,uni=null,drag=null;
   const hud=document.getElementById('walkhud'),hint=document.getElementById('walkhint');
   function C(){return window.Cesium;}
   function groundAt(lo,la){const Ce=C(),v=MAP.viewer();const h=v.scene.globe.getHeight(Ce.Cartographic.fromRadians(lo,la));return (typeof h==='number'&&isFinite(h))?h:null;}
-  function place(){const Ce=C(),v=MAP.viewer();v.camera.setView({destination:Ce.Cartesian3.fromRadians(lon,lat,ground+EYE),orientation:{heading,pitch,roll:0}});}
+  function place(){const Ce=C(),v=MAP.viewer();v.camera.setView({destination:Ce.Cartesian3.fromRadians(lon,lat,ground+alt),orientation:{heading,pitch,roll:0}});}
   function step(t){
     raf=requestAnimationFrame(step);
     const dt=Math.min(0.1,(t-(last||t))/1000);last=t;
     let f=0,s=0,turn=0;
+    if(keys.up)alt=Math.min(ALT_MAX,alt+60*dt);if(keys.down)alt=Math.max(ALT_MIN,alt-60*dt);
     if(keys.fwd)f+=1;if(keys.back)f-=1;if(keys.left)s-=1;if(keys.right)s+=1;if(keys.turnL)turn-=1;if(keys.turnR)turn+=1;
     heading+=turn*1.4*dt;
     if(f||s){
-      const sp=(run||keys.shift?14:4.5)*dt; // m/s: brisk walk 4.5, run 14
+      const sp=(run||keys.shift?70:22)*dt; // m/s: drone cruise 22, fast 70
       const dN=(Math.cos(heading)*f-Math.sin(heading)*s)*sp, dE=(Math.sin(heading)*f+Math.cos(heading)*s)*sp;
       lat+=dN/R_E; lon+=dE/(R_E*Math.cos(lat));
     }
-    const g=groundAt(lon,lat); if(g!==null) ground=g;
+    const g=groundAt(lon,lat); if(g!==null) ground+= (g-ground)*Math.min(1,dt*2.5); // smooth terrain following
     place();
   }
-  const KEYMAP={KeyW:'fwd',ArrowUp:'fwd',KeyS:'back',ArrowDown:'back',KeyA:'left',KeyD:'right',KeyQ:'turnL',ArrowLeft:'turnL',KeyE:'turnR',ArrowRight:'turnR'};
+  const KEYMAP={KeyW:'fwd',ArrowUp:'fwd',KeyS:'back',ArrowDown:'back',KeyA:'left',KeyD:'right',KeyQ:'turnL',ArrowLeft:'turnL',KeyE:'turnR',ArrowRight:'turnR',KeyR:'up',PageUp:'up',KeyF:'down',PageDown:'down'};
   function kd(e){if(!w.on||e.target.tagName==='INPUT')return;if(e.key==='Shift'){keys.shift=true;return;}const k=KEYMAP[e.code];if(k){keys[k]=true;e.preventDefault();}if(e.key==='Escape')w.exit(true);}
   function ku(e){if(e.key==='Shift'){keys.shift=false;return;}const k=KEYMAP[e.code];if(k)keys[k]=false;}
   function pd(e){if(!w.on)return;drag={x:e.clientX,y:e.clientY,h:heading,p:pitch};e.target.setPointerCapture&&e.target.setPointerCapture(e.pointerId);}
-  function pm(e){if(!drag)return;heading=drag.h-(e.clientX-drag.x)*0.005;pitch=Math.max(-1.1,Math.min(0.8,drag.p+(e.clientY-drag.y)*0.005));}
+  function pm(e){if(!drag)return;heading=drag.h-(e.clientX-drag.x)*0.005;pitch=Math.max(-1.45,Math.min(0.25,drag.p+(e.clientY-drag.y)*0.005));}
   function pu(){drag=null;}
   document.querySelectorAll('.pad button').forEach(b=>{const k=b.dataset.k;
     const on=e=>{e.preventDefault();keys[k]=true;b.classList.add('on');};const off=()=>{keys[k]=false;b.classList.remove('on');};
@@ -606,11 +610,11 @@ const WALK=(()=>{
   w.enter=function(u){
     if(!MAP.ready){countEl.textContent='3D 지도가 아직 준비되지 않았습니다. 잠시 뒤 다시 눌러 주세요.';return;}
     const Ce=C(),v=MAP.viewer();uni=u;
-    document.getElementById('walkname').textContent=u.name+' 걷는 중';
+    document.getElementById('walkname').textContent=u.name+' 탐방 중';
     // drop in from above so terrain tiles load, then start at eye level
-    v.camera.flyTo({destination:Ce.Cartesian3.fromDegrees(u.lon,u.lat-0.0012,220),orientation:{heading:0,pitch:Ce.Math.toRadians(-30),roll:0},duration:2.2,
+    v.camera.flyTo({destination:Ce.Cartesian3.fromDegrees(u.lon,u.lat-0.0026,420),orientation:{heading:0,pitch:Ce.Math.toRadians(-30),roll:0},duration:2.2,
       complete:()=>{
-        lon=Ce.Math.toRadians(u.lon);lat=Ce.Math.toRadians(u.lat-0.0004);heading=0;pitch=Ce.Math.toRadians(-4);
+        lon=Ce.Math.toRadians(u.lon);lat=Ce.Math.toRadians(u.lat-0.0026);heading=0;pitch=Ce.Math.toRadians(-30);alt=180;
         let tries=0;const wait=()=>{const g=groundAt(lon,lat);if(g===null&&tries++<40){setTimeout(wait,100);return;}ground=g===null?0:g;
           w.on=true;keys={};last=0;v.scene.screenSpaceCameraController.enableInputs=false;
           hud.hidden=false;hint.hidden=false;
