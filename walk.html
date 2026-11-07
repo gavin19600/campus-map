@@ -119,7 +119,7 @@ const P=new URLSearchParams(location.search);
 const LAT=parseFloat(P.get('lat')), LON=parseFloat(P.get('lon'));
 const NAME=(P.get('name')||'캠퍼스').slice(0,60);
 const MOCK=P.has('mock');
-const R=700; // metres around the school point
+const R=600; // metres around the school point
 $('name').textContent=NAME; document.title=NAME+' 걷기';
 $('loadTitle').textContent=NAME+'(으)로 가는 중';
 const isTouch=matchMedia('(pointer:coarse)').matches;
@@ -136,7 +136,7 @@ const KX=Math.cos(LAT*Math.PI/180)*111320, KZ=110540;
 const px=lon=>(lon-LON)*KX, pz=lat=>-(lat-LAT)*KZ;
 
 /* ---------- OpenStreetMap via Overpass (fetched in the visitor's browser) ---------- */
-const Q=`[out:json][timeout:40];(`+
+const Q=`[out:json][timeout:90];(`+
  `way["building"](around:${R},${LAT},${LON});`+
  `way["highway"](around:${R},${LAT},${LON});`+
  `way["leisure"~"^(pitch|park|garden|track|stadium)$"](around:${R},${LAT},${LON});`+
@@ -145,24 +145,47 @@ const Q=`[out:json][timeout:40];(`+
  `way["amenity"~"^(university|college)$"](around:${R},${LAT},${LON});`+
  `relation["amenity"~"^(university|college)$"](around:${R},${LAT},${LON});`+
  `);out geom;`;
-const EPS=['https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://maps.mail.ru/osm/tools/overpass/api/interpreter'];
+const EPS=['https://maps.mail.ru/osm/tools/overpass/api/interpreter','https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'];
 async function getOSM(){
   if(MOCK){const r=await fetch('mock-osm.json');return r.json();}
-  const key='osm2:'+LAT.toFixed(4)+','+LON.toFixed(4);
-  try{const c=sessionStorage.getItem(key);if(c)return JSON.parse(c);}catch(e){}
-  let err;
-  for(let i=0;i<EPS.length;i++){
+  const key='osm3:'+LAT.toFixed(4)+','+LON.toFixed(4);
+  try{const c=localStorage.getItem(key);if(c){status('예전에 받아 둔 자료로 캠퍼스를 짓는 중입니다…');return JSON.parse(c);}}catch(e){}
+  // ask every server at once and keep the first good answer
+  const t0=Date.now();
+  const tick=setInterval(()=>status(`OpenStreetMap에서 건물과 길 정보를 받는 중입니다… ${Math.round((Date.now()-t0)/1000)}초 (보통 20초~1분, 한 번 받으면 다음엔 바로 열려요)`),1000);
+  const ctrls=EPS.map(()=>new AbortController());
+  const tries=EPS.map((ep,i)=>(async()=>{
+    const t=setTimeout(()=>ctrls[i].abort(),100000);
     try{
-      const ac=new AbortController();const t=setTimeout(()=>ac.abort(),45000);
-      const r=await fetch(EPS[i],{method:'POST',body:'data='+encodeURIComponent(Q),headers:{'Content-Type':'application/x-www-form-urlencoded'},signal:ac.signal});
-      clearTimeout(t);
+      const r=await fetch(ep,{method:'POST',body:'data='+encodeURIComponent(Q),headers:{'Content-Type':'application/x-www-form-urlencoded'},signal:ctrls[i].signal});
       if(!r.ok)throw new Error('HTTP '+r.status);
       const j=await r.json();
-      try{sessionStorage.setItem(key,JSON.stringify(j));}catch(e){}
-      return j;
-    }catch(e){err=e;status('지도 서버가 바빠서 다른 서버에서 다시 받는 중입니다…');}
-  }
-  throw err||new Error('fetch failed');
+      if(!j||!Array.isArray(j.elements))throw new Error('bad data');
+      if(j.remark&&/timed out|runtime error/i.test(j.remark)&&!j.elements.length)throw new Error(j.remark);
+      return {j,i};
+    }finally{clearTimeout(t);}
+  })());
+  let res;
+  try{res=await Promise.any(tries);}
+  finally{clearInterval(tick);}
+  ctrls.forEach((c,i)=>{if(i!==res.i)c.abort();});
+  saveCache(key,res.j);
+  return res.j;
+}
+// keep only what the scene uses, rounded, so several campuses fit in browser storage
+function saveCache(key,j){
+  const KEEP=['building','name','name:ko','height','building:levels','highway','amenity','leisure','landuse','natural','location','layer'];
+  const rd=g=>({lat:+g.lat.toFixed(6),lon:+g.lon.toFixed(6)});
+  const slim={elements:(j.elements||[]).map(e=>{const t={};if(e.tags)for(const k of KEEP)if(e.tags[k]!==undefined)t[k]=e.tags[k];
+    const o={type:e.type,id:e.id,tags:t};if(e.geometry)o.geometry=e.geometry.map(rd);if(e.members)o.members=e.members.filter(m=>m.geometry).map(m=>({role:m.role,geometry:m.geometry.map(rd)}));return o;})};
+  try{
+    const idx=JSON.parse(localStorage.getItem('osm3:index')||'[]').filter(k=>k!==key);
+    idx.push(key);
+    while(idx.length>8){try{localStorage.removeItem(idx.shift());}catch(e){}}
+    const s=JSON.stringify(slim);
+    for(;;){try{localStorage.setItem(key,s);break;}catch(e){if(!idx.length||idx[0]===key)break;localStorage.removeItem(idx.shift());}}
+    localStorage.setItem('osm3:index',JSON.stringify(idx));
+  }catch(e){}
 }
 
 /* ---------- geometry helpers ---------- */
@@ -454,7 +477,7 @@ function loop(){
 (async()=>{
   let raw;
   try{raw=await getOSM();}
-  catch(e){fail('건물 정보를 받지 못했습니다. 지도 서버가 잠시 바쁠 수 있어요. 잠시 뒤 다시 시도해 주세요.');return;}
+  catch(e){fail('지도 서버들이 지금 너무 바빠 건물 정보를 받지 못했습니다. 1~2분 뒤 다시 시도해 주세요.');return;}
   status('받은 자료로 캠퍼스를 짓는 중입니다…');
   await new Promise(r=>setTimeout(r,30));
   const D=parse(raw);window._D=D;
