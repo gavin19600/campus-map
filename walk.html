@@ -305,7 +305,9 @@ scene.add(sun,sun.target);
 scene.add(new THREE.HemisphereLight('#dfe9f3','#6d7a5c',.22));
 
 /* ---------- post-processing: ambient occlusion + SMAA (high quality only) ---------- */
-let composer=null,aoPass=null,postCheck=0,aoBroken=false;
+let composer=null,aoPass=null,postCheck=0,aoBroken=false,blankRun=0;
+function isBlank(){const gl=renderer.getContext(),px=new Uint8Array(4);renderer.setRenderTarget(null);
+  gl.readPixels(gl.drawingBufferWidth>>1,gl.drawingBufferHeight>>2,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);return px[0]+px[1]+px[2]+px[3]===0;}
 async function setupPost(){
   if(composer||!HQ||aoBroken)return;postCheck=0;
   try{
@@ -316,7 +318,7 @@ async function setupPost(){
     c.addPass(aoPass);
     const pr=renderer.getPixelRatio();c.addPass(new SMAAPass(innerWidth*pr,innerHeight*pr));
     c.addPass(new OutputPass());
-    composer=c;
+    composer=c;blankRun=0;window.__walk={get composer(){return composer},renderer,scene,cam,aoPass};
   }catch(e){console.warn('AO unavailable',e);composer=null;}
 }
 addEventListener('resize',()=>{renderer.setSize(innerWidth,innerHeight);cam.aspect=innerWidth/innerHeight;cam.updateProjectionMatrix();if(composer){composer.setSize(innerWidth,innerHeight);aoPass&&aoPass.setSize(innerWidth,innerHeight);}drawMiniStatic();});
@@ -630,9 +632,12 @@ function loop(){
   if((nearT+=dt)>.25){nearT=0;let best=null,bd=1e9;for(const l of labels){const d=Math.hypot(l.b.ce[0]-S.x,l.b.ce[1]-S.z)-l.b.rad;if(d<bd){bd=d;best=l.b;}}
     const el=$('near');if(best&&bd<15){el.hidden=false;el.innerHTML='지금 앞: <b></b>';el.querySelector('b').textContent=best.name;}else el.hidden=true;}
   if(HQ&&composer){composer.render();
-    if(postCheck<4){postCheck++;renderer.setRenderTarget(null);const gl=renderer.getContext(),px=new Uint8Array(4);
-      gl.readPixels(gl.drawingBufferWidth>>1,gl.drawingBufferHeight>>2,1,1,gl.RGBA,gl.UNSIGNED_BYTE,px);
-      if(postCheck>=2&&px[3]===0&&px[0]===0&&px[1]===0&&px[2]===0){console.warn('post-processing produced an empty frame; turning it off');composer=null;aoBroken=true;$('hqBtn').textContent='고화질 켜짐(그림자 효과 제외)';renderer.render(scene,cam);}}}
+    if(postCheck<60){postCheck++;
+      if(postCheck>20&&!document.hidden){
+        if(isBlank()){ if(++blankRun>=10){renderer.setRenderTarget(null);renderer.render(scene,cam);
+            if(!isBlank()){console.warn('post-processing produced empty frames; turning it off');composer=null;aoBroken=true;$('hqBtn').textContent='고화질 켜짐(그림자 효과 제외)';}
+            else{postCheck=60;}}}
+        else{blankRun=0;postCheck=60;}}}}
   else renderer.render(scene,cam);
   drawMini();
 }
