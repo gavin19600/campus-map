@@ -1,3 +1,3 @@
-// N8AO imports Pass from the "postprocessing" package only for its N8AOPass class.
-// This site uses N8AOPostPass with three.js EffectComposer, so an empty class is enough.
+// N8AO's bundle also contains N8AOPostPass, which extends Pass from the "postprocessing" package.
+// This site uses N8AOPass with three.js EffectComposer instead, so an empty class is enough here.
 export class Pass {}
