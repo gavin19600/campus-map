@@ -177,21 +177,26 @@ async function getOSM(){
   try{const c=localStorage.getItem(key);if(c)return JSON.parse(c);}catch(e){}
   const t0=Date.now();
   const tick=setInterval(()=>status(`OpenStreetMap에서 건물과 길 정보를 받는 중입니다… ${Math.round((Date.now()-t0)/1000)}초 (보통 20초~1분, 한 번 받으면 다음엔 바로 열려요)`),1000);
-  const ctrls=EPS.map(()=>new AbortController());
-  const tries=EPS.map((ep,i)=>(async()=>{
-    const t=setTimeout(()=>ctrls[i].abort(),100000);
-    try{
-      const r=await fetch(ep,{method:'POST',body:'data='+encodeURIComponent(Q),headers:{'Content-Type':'application/x-www-form-urlencoded'},signal:ctrls[i].signal});
-      if(!r.ok)throw new Error('HTTP '+r.status);
-      const j=await r.json();
-      if(!j||!Array.isArray(j.elements))throw new Error('bad data');
-      if(j.remark&&/timed out|runtime error/i.test(j.remark)&&!j.elements.length)throw new Error(j.remark);
-      return {j,i};
-    }finally{clearTimeout(t);}
-  })());
+  // all servers are tried at once; if every one fails (they are often briefly busy), try one more round
   let res;
-  try{res=await Promise.any(tries);}finally{clearInterval(tick);}
-  ctrls.forEach((c,i)=>{if(i!==res.i)c.abort();});
+  try{
+    for(let round=0;;round++){
+      const ctrls=EPS.map(()=>new AbortController());
+      const tries=EPS.map((ep,i)=>(async()=>{
+        const t=setTimeout(()=>ctrls[i].abort(),100000);
+        try{
+          const r=await fetch(ep,{method:'POST',body:'data='+encodeURIComponent(Q),headers:{'Content-Type':'application/x-www-form-urlencoded'},signal:ctrls[i].signal});
+          if(!r.ok)throw new Error('HTTP '+r.status);
+          const j=await r.json();
+          if(!j||!Array.isArray(j.elements))throw new Error('bad data');
+          if(j.remark&&/timed out|runtime error/i.test(j.remark)&&!j.elements.length)throw new Error(j.remark);
+          return {j,i};
+        }finally{clearTimeout(t);}
+      })());
+      try{res=await Promise.any(tries);ctrls.forEach((c,i)=>{if(i!==res.i)c.abort();});break;}
+      catch(e){if(round>=1)throw e;await new Promise(r=>setTimeout(r,4000));}
+    }
+  }finally{clearInterval(tick);}
   saveCache(key,res.j);
   return res.j;
 }
