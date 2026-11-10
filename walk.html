@@ -82,6 +82,7 @@ button,a{font:inherit;color:inherit}
 }
 @media (hover:hover) and (pointer:fine){.joy{opacity:.5}}
 @media (prefers-reduced-motion:reduce){.bar i{animation:none;width:100%}.fader{transition:none}}
+body.over .joy,body.over #runBtn{display:none}
 </style>
 </head>
 <body>
@@ -99,7 +100,7 @@ button,a{font:inherit;color:inherit}
 <div class="side">
   <button class="btn" id="hqBtn" aria-pressed="false">고화질</button>
   <button class="btn" id="runBtn" aria-pressed="false">달리기</button>
-  <button class="btn" id="viewBtn" aria-pressed="false">높이 보기</button>
+  <button class="btn" id="viewBtn">걸어서 들어가기</button>
 </div>
 <aside class="places" id="places" hidden>
   <header><b>가 볼 곳</b><button class="btn" id="placesClose">닫기</button></header>
@@ -140,7 +141,7 @@ const P=new URLSearchParams(location.search);
 const LAT=parseFloat(P.get('lat')),LON=parseFloat(P.get('lon'));
 const NAME=(P.get('name')||'캠퍼스').slice(0,60);
 const MOCK=P.has('mock');
-const R=600; // metres around the school point
+const R=750; // metres around the school point
 const MOBILE=matchMedia('(pointer:coarse)').matches||innerWidth<700;
 let HQ=!MOBILE;try{const s=localStorage.getItem('walk:hq');if(s!==null)HQ=s==='1';}catch(e){}
 $('name').textContent=NAME;document.title=NAME+' 걷기';
@@ -170,9 +171,10 @@ const Q=`[out:json][timeout:90];(`+
 const EPS=['https://maps.mail.ru/osm/tools/overpass/api/interpreter','https://overpass-api.de/api/interpreter','https://overpass.kumi.systems/api/interpreter','https://overpass.private.coffee/api/interpreter'];
 async function getOSM(){
   if(MOCK)return (await fetch('mock-osm.json')).json();
-  const ll=LAT.toFixed(4)+','+LON.toFixed(4),key='osm4:'+ll;
-  // osm4 adds parking lots; an older osm3 copy is still good enough to open instantly
-  try{const c=localStorage.getItem(key)||localStorage.getItem('osm3:'+ll);if(c)return JSON.parse(c);}catch(e){}
+  const ll=LAT.toFixed(4)+','+LON.toFixed(4),key='osm5:'+ll;
+  // older copies (osm3/osm4) cover a smaller area, so they are dropped rather than reused
+  try{for(const k of Object.keys(localStorage))if(/^osm[34]:/.test(k))localStorage.removeItem(k);}catch(e){}
+  try{const c=localStorage.getItem(key);if(c)return JSON.parse(c);}catch(e){}
   const t0=Date.now();
   const tick=setInterval(()=>status(`OpenStreetMap에서 건물과 길 정보를 받는 중입니다… ${Math.round((Date.now()-t0)/1000)}초 (보통 20초~1분, 한 번 받으면 다음엔 바로 열려요)`),1000);
   const ctrls=EPS.map(()=>new AbortController());
@@ -199,11 +201,11 @@ function saveCache(key,j){
   const slim={elements:(j.elements||[]).map(e=>{const t={};if(e.tags)for(const k of KEEP)if(e.tags[k]!==undefined)t[k]=e.tags[k];
     const o={type:e.type,id:e.id,tags:t};if(e.geometry)o.geometry=e.geometry.map(rd);if(e.members)o.members=e.members.filter(m=>m.geometry).map(m=>({role:m.role,geometry:m.geometry.map(rd)}));return o;})};
   try{
-    const idx=JSON.parse(localStorage.getItem('osm4:index')||localStorage.getItem('osm3:index')||'[]').filter(k=>k!==key);idx.push(key);
-    while(idx.length>8){try{localStorage.removeItem(idx.shift());}catch(e){}}
+    const idx=JSON.parse(localStorage.getItem('osm5:index')||'[]').filter(k=>k!==key);idx.push(key);
+    while(idx.length>6){try{localStorage.removeItem(idx.shift());}catch(e){}}
     const s=JSON.stringify(slim);
     for(;;){try{localStorage.setItem(key,s);break;}catch(e){if(!idx.length||idx[0]===key)break;localStorage.removeItem(idx.shift());}}
-    localStorage.setItem('osm4:index',JSON.stringify(idx));
+    localStorage.setItem('osm5:index',JSON.stringify(idx));
   }catch(e){}
 }
 
@@ -211,7 +213,7 @@ function saveCache(key,j){
 const STEP=4,NG=Math.round(2*R/STEP)+1;
 const HG=new Float32Array(NG*NG);
 async function getTerrain(){
-  if(MOCK){for(let j=0;j<NG;j++)for(let i=0;i<NG;i++){const x=-R+i*STEP,z=-R+j*STEP;HG[j*NG+i]=6*Math.sin(x/90)+4*Math.cos(z/70)+Math.max(0,(-z-200)/8);}return true;}
+  if(MOCK){for(let j=0;j<NG;j++)for(let i=0;i<NG;i++){const x=-R+i*STEP,z=-R+j*STEP;HG[j*NG+i]=6*Math.sin(x/90)+4*Math.cos(z/70)+Math.max(0,(-z-200)/8)+Math.max(0,-z-260)*.4;}return true;}
   const Z=15,n=2**Z;
   const lon2x=lon=>(lon+180)/360*n;
   const lat2y=lat=>{const r=lat*Math.PI/180;return (1-Math.log(Math.tan(r)+1/Math.cos(r))/Math.PI)/2*n;};
@@ -246,6 +248,9 @@ function heightAt(x,z){
   const ax=Math.min(1,Math.max(0,fx-i)),az=Math.min(1,Math.max(0,fz-j));
   return HG[j*NG+i]*(1-ax)*(1-az)+HG[j*NG+i+1]*ax*(1-az)+HG[(j+1)*NG+i]*(1-ax)*az+HG[(j+1)*NG+i+1]*ax*az;
 }
+
+const slopeAt=(x,z)=>Math.hypot(heightAt(x+12,z)-heightAt(x-12,z),heightAt(x,z+12)-heightAt(x,z-12))/24;
+const STEEP=.2; // steeper than this and not built on: treated as wooded hillside
 
 /* ---------- geometry helpers ---------- */
 function ring(geom){const p=geom.map(g=>[px(g.lon),pz(g.lat)]);if(p.length>2){const a=p[0],b=p[p.length-1];if(Math.abs(a[0]-b[0])<.01&&Math.abs(a[1]-b[1])<.01)p.pop();}return p;}
@@ -294,10 +299,10 @@ const scene=new THREE.Scene();
 const cam=new THREE.PerspectiveCamera(52,innerWidth/innerHeight,.15,4000);
 const SUN_DIR=new THREE.Vector3().setFromSphericalCoords(1,THREE.MathUtils.degToRad(90-38),THREE.MathUtils.degToRad(220));
 function makeSky(){const s=new Sky();s.scale.setScalar(9000);const u=s.material.uniforms;u.turbidity.value=2.6;u.rayleigh.value=1.25;u.mieCoefficient.value=.004;u.mieDirectionalG.value=.82;u.sunPosition.value.copy(SUN_DIR);return s;}
-scene.add(makeSky());
+const sky=makeSky();scene.add(sky);
 {const pm=new THREE.PMREMGenerator(renderer);const es=new THREE.Scene();es.add(makeSky());scene.environment=pm.fromScene(es,0,1,20000).texture;pm.dispose();}
 scene.environmentIntensity=.6;
-scene.fog=new THREE.Fog('#cbd8e3',240,1150);
+const FOG=new THREE.Fog('#cbd8e3',240,1150),BG=new THREE.Color('#eef1f2');scene.fog=FOG;
 const sun=new THREE.DirectionalLight('#ffe8c8',2.25);
 sun.castShadow=true;
 const SH=HQ?95:75;
@@ -364,7 +369,7 @@ function facade(kind){
 function noiseTex(base,cols,a,n){const c=cnv(256,256),g=c.getContext('2d');g.fillStyle=base;g.fillRect(0,0,256,256);speckle(g,256,256,n,cols,a);return tex(c);}
 
 /* ---------- world build ---------- */
-const B=[];let CAMPUS=[],campusCenter=[0,0];
+const B=[];let CAMPUS=[],campusCenter=[0,0];const farGround=[];
 const GRID=16,grid=new Map();
 function gridAdd(i,b){for(let gx=Math.floor(b.minx/GRID);gx<=Math.floor(b.maxx/GRID);gx++)for(let gz=Math.floor(b.minz/GRID);gz<=Math.floor(b.maxz/GRID);gz++){const k=gx+','+gz;let l=grid.get(k);if(!l)grid.set(k,l=[]);l.push(i);}}
 function inBuilding(x,z){const l=grid.get(Math.floor(x/GRID)+','+Math.floor(z/GRID));if(!l)return -1;for(const i of l){const b=B[i];if(x<b.minx||x>b.maxx||z<b.minz||z>b.maxz)continue;if(pip(x,z,b.pts))return i;}return -1;}
@@ -396,7 +401,7 @@ function paintLandcover(D){
   const tx=x=>(x+R)*S,tz=z=>(z+R)*S;
   const poly=(pts)=>{g.beginPath();pts.forEach((p,i)=>i?g.lineTo(tx(p[0]),tz(p[1])):g.moveTo(tx(p[0]),tz(p[1])));g.closePath();};
   const pat=(base,cols,a,n)=>{const p=cnv(128,128),q=p.getContext('2d');q.fillStyle=base;q.fillRect(0,0,128,128);speckle(q,128,128,n,cols,a);return g.createPattern(p,'repeat');};
-  g.fillStyle=pat('#93948f',['#7d7e7a','#a6a7a2','#86877f'],.5,1400);g.fillRect(0,0,T,T);
+  g.fillStyle=pat('#b3b1a8',['#a3a198','#c2c0b8','#aaa89f'],.5,1400);g.fillRect(0,0,T,T);
   const grassP=pat('#6f9a4b',['#5d8a3e','#80aa5a','#6a9046','#8bb365'],.6,2400);
   CAMPUS.forEach(cp=>{poly(cp.pts);g.fillStyle=grassP;g.fill();});
   const order={stadium:0,grass:1,park:2,wood:3,parking:4,plaza:5,pitch:6,track:7,water:8};
@@ -418,6 +423,9 @@ function paintLandcover(D){
       g.save();poly(a.pts);g.clip();g.translate(tx(cx),tz(cz));g.rotate(ang);g.strokeStyle='rgba(235,235,230,.85)';g.lineWidth=Math.max(1,.12*S);
       for(let row=-ext;row<ext;row+=12){for(let s=-ext;s<ext;s+=2.5){g.beginPath();g.moveTo(s*S,row*S);g.lineTo(s*S,(row+5)*S);g.stroke();}}
       g.restore();}});
+  // wooded hillsides (steep, unbuilt ground)
+  {const fp=pat('#3d6a33',['#2f5a28','#4a7a3c','#35602d'],.7,2600);g.fillStyle=fp;
+   for(let z=-R;z<R;z+=8)for(let x=-R;x<R;x+=8)if(slopeAt(x+4,z+4)>=STEEP){g.beginPath();g.arc(tx(x+4),tz(z+4),7.5*S,0,6.3);g.fill();}}
   // roads: curb/sidewalk, asphalt, markings
   g.lineCap='round';g.lineJoin='round';
   const stroke=(pts,w,col,dash)=>{g.beginPath();pts.forEach((p,i)=>i?g.lineTo(tx(p[0]),tz(p[1])):g.moveTo(tx(p[0]),tz(p[1])));g.strokeStyle=col;g.lineWidth=Math.max(1,w*S);g.setLineDash(dash||[]);g.stroke();g.setLineDash([]);};
@@ -461,10 +469,17 @@ function buildTerrain(){
   m.receiveShadow=true;scene.add(m);
   let mn=1e9;for(let k=0;k<HG.length;k++)mn=Math.min(mn,HG[k]);
   const outer=new THREE.Mesh(new THREE.RingGeometry(R*1.38,R*8,64,1),new THREE.MeshStandardMaterial({color:'#8d8f8a',roughness:1}));
-  outer.rotation.x=-Math.PI/2;outer.position.y=mn-1.5;scene.add(outer);
+  outer.rotation.x=-Math.PI/2;outer.position.y=mn-1.5;scene.add(outer);farGround.push(outer);
   // fill the gap between the square terrain and the ring
   const skirt=new THREE.Mesh(new THREE.PlaneGeometry(R*2.9,R*2.9),new THREE.MeshStandardMaterial({color:'#8d8f8a',roughness:1}));
-  skirt.rotation.x=-Math.PI/2;skirt.position.y=mn-1.6;scene.add(skirt);
+  skirt.rotation.x=-Math.PI/2;skirt.position.y=mn-1.6;scene.add(skirt);farGround.push(skirt);
+  // cut sides of the tile, seen in the whole-campus view
+  {const wp=[],bot=mn-28,edge=[];
+   for(let i=0;i<NG;i++)edge.push([-R+i*STEP,-R]);for(let i=0;i<NG;i++)edge.push([R,-R+i*STEP]);for(let i=NG-1;i>=0;i--)edge.push([-R+i*STEP,R]);for(let i=NG-1;i>=0;i--)edge.push([-R,-R+i*STEP]);
+   for(let i=0;i<edge.length-1;i++){const a=edge[i],b=edge[i+1];if(a[0]===b[0]&&a[1]===b[1])continue;const ya=heightAt(a[0],a[1]),yb=heightAt(b[0],b[1]);
+     wp.push(a[0],ya,a[1],b[0],yb,b[1],b[0],bot,b[1],a[0],ya,a[1],b[0],bot,b[1],a[0],bot,a[1]);}
+   const wg=new THREE.BufferGeometry();wg.setAttribute('position',new THREE.Float32BufferAttribute(wp,3));wg.computeVertexNormals();
+   scene.add(new THREE.Mesh(wg,new THREE.MeshStandardMaterial({color:'#d8d2c6',roughness:1,side:THREE.DoubleSide})));}
 }
 
 function buildBuildings(D){
@@ -554,7 +569,7 @@ function buildTrees(D){
   for(const r of D.roads){const s=ROADW(r.t);if(s.w>10)continue;const off=s.w/2+(s.foot?1.6:2.6);
     for(let i=0;i<r.pts.length-1;i++){const [x1,z1]=r.pts[i],[x2,z2]=r.pts[i+1],L=Math.hypot(x2-x1,z2-z1);if(L<4)continue;const nx=-(z2-z1)/L,nz=(x2-x1)/L;
       for(let d=4;d<L-2;d+=9){const x=x1+(x2-x1)*d/L,z=z1+(z2-z1)*d/L;if(!isCampus(x,z))continue;for(const sgn of [1,-1]){const X=x+nx*off*sgn,Z=z+nz*off*sgn;if(soilFree(X,Z)&&rnd()<.75)pts.push([X,Z,.75+rnd()*.35,false]);}}}}
-  const list=pts.slice(0,cap);if(!list.length)return;
+  const list=pts.slice(0,cap);
   // three tree types: broad deciduous, tall oval, layered pine. Lumpy smooth crowns, darker underneath.
   const VAR=[
     {parts:[[0,0,0,2.2],[1.5,-.4,.5,1.6],[-1.4,-.3,-.7,1.7],[.4,.9,-.6,1.5],[-.6,.7,1,1.4],[.9,-.2,-1.4,1.3],[-1.2,-.6,1.1,1.2]],y:5,trunkH:4.2,shade:[.24,.40,.17]},
@@ -587,6 +602,15 @@ function buildTrees(D){
   const bark=new THREE.MeshStandardMaterial({color:'#5b4637',roughness:.9});
   VAR.forEach((v,k)=>{make(groups[k],crown(v.parts,k*977+11),leaf,v.y,v.shade);make(groups[k],trunkG,bark,0);});
   make(groups[2],pineG(),leaf.clone(),1.6,[.31,.36,.13]);make(groups[2],trunkG,bark,0);
+  // forest canopy on wooded hillsides: one lumpy crown per tree, packed close
+  {const fr=rng(977),want=[];
+   for(let z=-R+3;z<R-3;z+=6.5)for(let x=-R+3;x<R-3;x+=6.5){const X=x+(fr()-.5)*5,Z=z+(fr()-.5)*5;
+     if(slopeAt(X,Z)<STEEP||!soilFree(X,Z)||!soilFree(X+6,Z)||!soilFree(X-6,Z)||!soilFree(X,Z+6)||!soilFree(X,Z-6))continue;want.push([X,Z,.75+fr()*.6]);}
+   const capF=HQ?20000:7000,keep=Math.min(1,capF/Math.max(1,want.length)),arr=want.filter(()=>fr()<keep);
+   if(arr.length){const fg=crown([[0,0,0,3.3]],4242),m=new THREE.InstancedMesh(fg,leaf,arr.length),sc=keep<1?1/Math.sqrt(keep):1;
+     arr.forEach((t,i)=>{const s=t[2]*Math.min(1.7,sc);o.position.set(t[0],heightAt(t[0],t[1])+2.6*s,t[1]);o.scale.set(s,s*1.25,s);o.rotation.set(0,hash(i*31)*6.28,0);o.updateMatrix();m.setMatrixAt(i,o.matrix);
+       col.setHSL(.27+hash(i*17)*.07,.42+hash(i*23)*.16,.13+hash(i*29)*.09);m.setColorAt(i,col);});
+     m.castShadow=true;m.receiveShadow=true;scene.add(m);}}
 }
 
 /* ---------- name labels (dark pills, constant screen size) ---------- */
@@ -605,6 +629,7 @@ function makeLabel(text){
 function placeLabels(){
   const named=B.filter(b=>b.name);const pick=(named.some(b=>b.camp)?named.filter(b=>b.camp):named).slice(0,160);
   for(const b of pick){const s=makeLabel(b.name);s.position.set(b.ce[0],b.top+2.5,b.ce[1]);s.visible=false;scene.add(s);labels.push({s,b});}
+  labels.slice().sort((a,b)=>b.b.rad-a.b.rad).slice(0,14).forEach(l=>l.top=true);
   return pick;
 }
 
@@ -624,19 +649,21 @@ function makeStudent(){
 const me=makeStudent();scene.add(me);
 
 /* ---------- input ---------- */
-const S={x:0,z:0,yaw:0,pitch:.42,dist:14,run:false,high:false,walkT:0,speed:0};
+const S={x:0,z:0,yaw:0,pitch:.42,dist:14,run:false,over:true,walkT:0,speed:0};
+const O={yaw:.7,pitch:.6,dist:R*1.45,touched:false}; // whole-campus view
+const V=()=>S.over?O:S,DMAX=()=>S.over?R*3:120,DMIN=()=>S.over?160:3.5;
 const keys={};const KM={KeyW:'f',ArrowUp:'f',KeyS:'b',ArrowDown:'b',KeyA:'l',ArrowLeft:'l',KeyD:'r',ArrowRight:'r'};
 addEventListener('keydown',e=>{if(e.key==='Shift')keys.shift=true;const k=KM[e.code];if(k){keys[k]=true;e.preventDefault();}});
 addEventListener('keyup',e=>{if(e.key==='Shift')keys.shift=false;const k=KM[e.code];if(k)keys[k]=false;});
 addEventListener('blur',()=>{for(const k in keys)keys[k]=false;});
 const ptrs=new Map();let pinch0=0,dist0=0;
-canvas.addEventListener('pointerdown',e=>{canvas.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch0=Math.hypot(a.x-b.x,a.y-b.y);dist0=S.dist;}});
+canvas.addEventListener('pointerdown',e=>{O.touched=true;canvas.setPointerCapture(e.pointerId);ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});if(ptrs.size===2){const [a,b]=[...ptrs.values()];pinch0=Math.hypot(a.x-b.x,a.y-b.y);dist0=V().dist;}});
 canvas.addEventListener('pointermove',e=>{const p=ptrs.get(e.pointerId);if(!p)return;
-  if(ptrs.size===2){ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});const [a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0>0)S.dist=Math.min(120,Math.max(3.5,dist0*pinch0/d));return;}
-  const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;S.yaw-=dx*.0065;S.pitch=Math.min(1.4,Math.max(.04,S.pitch+dy*.0045));});
+  if(ptrs.size===2){ptrs.set(e.pointerId,{x:e.clientX,y:e.clientY});const [a,b]=[...ptrs.values()];const d=Math.hypot(a.x-b.x,a.y-b.y);if(pinch0>0)V().dist=Math.min(DMAX(),Math.max(DMIN(),dist0*pinch0/d));return;}
+  const dx=e.clientX-p.x,dy=e.clientY-p.y;p.x=e.clientX;p.y=e.clientY;const v=V();v.yaw-=dx*.0065;v.pitch=Math.min(1.4,Math.max(S.over?.22:.04,v.pitch+dy*.0045));});
 const endPtr=e=>{ptrs.delete(e.pointerId);if(ptrs.size<2)pinch0=0;};
 canvas.addEventListener('pointerup',endPtr);canvas.addEventListener('pointercancel',endPtr);
-canvas.addEventListener('wheel',e=>{e.preventDefault();S.dist=Math.min(120,Math.max(3.5,S.dist*Math.exp(e.deltaY*.0011)));},{passive:false});
+canvas.addEventListener('wheel',e=>{e.preventDefault();O.touched=true;const v=V();v.dist=Math.min(DMAX(),Math.max(DMIN(),v.dist*Math.exp(e.deltaY*.0011)));},{passive:false});
 const joy=$('joy'),knob=$('knob');let jx=0,jy=0,jid=null;
 function joyMove(e){const r=joy.getBoundingClientRect();let dx=e.clientX-(r.left+r.width/2),dy=e.clientY-(r.top+r.height/2);const m=Math.hypot(dx,dy),max=r.width*.38;if(m>max){dx*=max/m;dy*=max/m;}jx=dx/max;jy=dy/max;knob.style.transform=`translate(${dx}px,${dy}px)`;}
 joy.addEventListener('pointerdown',e=>{jid=e.pointerId;joy.setPointerCapture(jid);joyMove(e);e.preventDefault();});
@@ -644,12 +671,25 @@ joy.addEventListener('pointermove',e=>{if(e.pointerId===jid)joyMove(e);});
 const joyEnd=e=>{if(e.pointerId!==jid)return;jid=null;jx=jy=0;knob.style.transform='';};
 joy.addEventListener('pointerup',joyEnd);joy.addEventListener('pointercancel',joyEnd);
 $('runBtn').onclick=e=>{S.run=!S.run;e.currentTarget.classList.toggle('on',S.run);e.currentTarget.setAttribute('aria-pressed',S.run);};
-$('viewBtn').onclick=e=>{S.high=!S.high;e.currentTarget.classList.toggle('on',S.high);e.currentTarget.setAttribute('aria-pressed',S.high);if(S.high){S.saved=[S.dist,S.pitch];S.dist=150;S.pitch=.85;}else if(S.saved){[S.dist,S.pitch]=S.saved;}};
+function setMode(over){
+  S.over=over;document.body.classList.toggle('over',over);
+  const b=$('viewBtn');b.textContent=over?'걸어서 들어가기':'전체 보기';b.classList.toggle('on',over);
+  sky.visible=!over;scene.background=over?BG:null;scene.fog=over?null:FOG;farGround.forEach(m=>m.visible=!over);
+  cam.near=over?8:.15;cam.far=over?8000:4000;cam.updateProjectionMatrix();
+  const c=sun.shadow.camera,s=over?R*1.25:SH;c.left=-s;c.right=s;c.top=s;c.bottom=-s;c.far=over?3600:700;c.updateProjectionMatrix();sun.shadow.normalBias=over?2:.5;
+  if(over){const hc=heightAt(0,0);sun.position.set(SUN_DIR.x*1700,hc+SUN_DIR.y*1700,SUN_DIR.z*1700);sun.target.position.set(0,hc,0);}
+  if(aoPass)Object.assign(aoPass.configuration,over?{aoRadius:14,distanceFalloff:1,intensity:3.2}:{aoRadius:3.2,distanceFalloff:1.2,intensity:2.6});
+  me.visible=!over;camPos=null;
+  if(over)for(const l of labels)l.s.visible=!!l.top;
+  const h=$('hint');h.hidden=false;h.classList.remove('fade');h.textContent=over?'끌어서 돌려 보기 · 휠·두 손가락으로 확대 · ‘걸어서 들어가기’로 캠퍼스 산책':'WASD·방향키로 걷기 · 화면을 끌어 둘러보기 · Shift 달리기';
+  clearTimeout(setMode.t);setMode.t=setTimeout(()=>h.classList.add('fade'),7000);
+}
+$('viewBtn').onclick=()=>setMode(!S.over);
 
 /* ---------- places & teleport ---------- */
 function fadeTo(fn){const f=$('fader');f.classList.add('on');setTimeout(()=>{fn();f.classList.remove('on');},260);}
 function goTo(x,z,fx,fz){const p=freeNear(x,z);S.x=p[0];S.z=p[1];if(fx!==undefined){const dx=fx-S.x,dz=fz-S.z;S.yaw=Math.atan2(-dx,-dz);me.rotation.y=Math.atan2(dx,dz);}camPos=null;}
-function goToBuilding(b){fadeTo(()=>{const dx=S.x-b.ce[0],dz=S.z-b.ce[1],L=Math.hypot(dx,dz)||1;goTo(b.ce[0]+dx/L*(b.rad+4),b.ce[1]+dz/L*(b.rad+4),b.ce[0],b.ce[1]);});}
+function goToBuilding(b){fadeTo(()=>{if(S.over)setMode(false);const dx=S.x-b.ce[0],dz=S.z-b.ce[1],L=Math.hypot(dx,dz)||1;goTo(b.ce[0]+dx/L*(b.rad+4),b.ce[1]+dz/L*(b.rad+4),b.ce[0],b.ce[1]);});}
 $('placesBtn').onclick=()=>{$('places').hidden=!$('places').hidden;};
 $('placesClose').onclick=()=>{$('places').hidden=true;};
 function fillPlaces(list){
@@ -675,13 +715,20 @@ const clock=new THREE.Clock(),want=new THREE.Vector3();let frame=0,nearT=0,camPo
 function loop(){
   requestAnimationFrame(loop);const dt=Math.min(.05,clock.getDelta());frame++;
   let f=(keys.f?1:0)-(keys.b?1:0)-jy,s=(keys.r?1:0)-(keys.l?1:0)+jx;const mag=Math.min(1,Math.hypot(f,s));
-  if(mag>.08){const k=Math.max(1,Math.hypot(f,s));f/=k;s/=k;const sy=Math.sin(S.yaw),cy=Math.cos(S.yaw);const vx=-sy*f+cy*s,vz=-cy*f-sy*s;
+  if(mag>.08&&!S.over){const k=Math.max(1,Math.hypot(f,s));f/=k;s/=k;const sy=Math.sin(S.yaw),cy=Math.cos(S.yaw);const vx=-sy*f+cy*s,vz=-cy*f-sy*s;
     const run=S.run||keys.shift||Math.hypot(jx,jy)>.95;const sp=(run?8.5:4.2)*dt*Math.max(.35,mag);const nx=S.x+vx*sp,nz=S.z+vz*sp;
     if(!blocked(nx,nz)){S.x=nx;S.z=nz;}else if(!blocked(nx,S.z))S.x=nx;else if(!blocked(S.x,nz))S.z=nz;
     let d=Math.atan2(vx,vz)-me.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d));me.rotation.y+=d*Math.min(1,dt*12);S.walkT+=dt*(run?13:8.5);S.speed=1;}
   else S.speed=Math.max(0,S.speed-dt*4);
   const sw=Math.sin(S.walkT)*.6*S.speed,U=me.userData;U.legs[0].rotation.x=sw;U.legs[1].rotation.x=-sw;U.arms[0].rotation.x=-sw*.8;U.arms[1].rotation.x=sw*.8;
   const gy=heightAt(S.x,S.z);me.position.set(S.x,gy+Math.abs(Math.sin(S.walkT))*.05*S.speed,S.z);
+  if(S.over){
+    if(!O.touched)O.yaw+=dt*.035;
+    const cl=v=>Math.max(-R*.3,Math.min(R*.3,v)),cx=cl(campusCenter[0]),cz=cl(campusCenter[1]),cy0=heightAt(cx,cz)+10,cp=Math.cos(O.pitch);
+    want.set(cx+Math.sin(O.yaw)*O.dist*cp,cy0+Math.sin(O.pitch)*O.dist,cz+Math.cos(O.yaw)*O.dist*cp);
+    if(!camPos)camPos=want.clone();else camPos.lerp(want,Math.min(1,dt*6));
+    cam.position.copy(camPos);cam.lookAt(cx,cy0,cz);
+  }else{
   const cp=Math.cos(S.pitch),ty=gy+1.5;
   want.set(S.x+Math.sin(S.yaw)*S.dist*cp,ty+Math.sin(S.pitch)*S.dist,S.z+Math.cos(S.yaw)*S.dist*cp);
   want.y=Math.max(want.y,heightAt(want.x,want.z)+1.2);
@@ -693,9 +740,10 @@ function loop(){
   if(!camPos)camPos=want.clone();else camPos.lerp(want,Math.min(1,dt*8));
   cam.position.copy(camPos);cam.lookAt(S.x,ty,S.z);
   sun.position.set(S.x+SUN_DIR.x*400,gy+SUN_DIR.y*400,S.z+SUN_DIR.z*400);sun.target.position.set(S.x,gy,S.z);
-  if(frame%10===0){const lim=(S.high?480:240)**2;for(const l of labels){const dx=l.b.ce[0]-S.x,dz=l.b.ce[1]-S.z;l.s.visible=dx*dx+dz*dz<lim;}}
+  }
+  if(frame%10===0){if(S.over)for(const l of labels)l.s.visible=!!l.top;else{const lim=240**2;for(const l of labels){const dx=l.b.ce[0]-S.x,dz=l.b.ce[1]-S.z;l.s.visible=dx*dx+dz*dz<lim;}}}
   if((nearT+=dt)>.25){nearT=0;let best=null,bd=1e9;for(const l of labels){const d=Math.hypot(l.b.ce[0]-S.x,l.b.ce[1]-S.z)-l.b.rad;if(d<bd){bd=d;best=l.b;}}
-    const el=$('near');if(best&&bd<15){el.hidden=false;el.innerHTML='지금 앞: <b></b>';el.querySelector('b').textContent=best.name;}else el.hidden=true;}
+    const el=$('near');if(best&&bd<15&&!S.over){el.hidden=false;el.innerHTML='지금 앞: <b></b>';el.querySelector('b').textContent=best.name;}else el.hidden=true;}
   if(HQ&&composer){composer.render();
     if(postCheck<60){postCheck++;
       if(postCheck>20&&!document.hidden){
@@ -733,8 +781,8 @@ function loop(){
   goTo(0,0,fx,fz);
   drawMiniStatic();
   await setupPost();
+  setMode(true);
   $('load').hidden=true;
-  setTimeout(()=>$('hint').classList.add('fade'),7000);setTimeout(()=>$('hint').hidden=true,7800);
   loop();
 })();
 </script>
