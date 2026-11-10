@@ -291,7 +291,7 @@ renderer.setSize(innerWidth,innerHeight);
 renderer.toneMapping=THREE.ACESFilmicToneMapping;renderer.toneMappingExposure=.66;
 renderer.shadowMap.enabled=true;renderer.shadowMap.type=THREE.PCFSoftShadowMap;
 const scene=new THREE.Scene();
-const cam=new THREE.PerspectiveCamera(52,innerWidth/innerHeight,.3,4000);
+const cam=new THREE.PerspectiveCamera(52,innerWidth/innerHeight,.15,4000);
 const SUN_DIR=new THREE.Vector3().setFromSphericalCoords(1,THREE.MathUtils.degToRad(90-38),THREE.MathUtils.degToRad(220));
 function makeSky(){const s=new Sky();s.scale.setScalar(9000);const u=s.material.uniforms;u.turbidity.value=2.6;u.rayleigh.value=1.25;u.mieCoefficient.value=.004;u.mieDirectionalG.value=.82;u.sunPosition.value.copy(SUN_DIR);return s;}
 scene.add(makeSky());
@@ -370,7 +370,10 @@ function gridAdd(i,b){for(let gx=Math.floor(b.minx/GRID);gx<=Math.floor(b.maxx/G
 function inBuilding(x,z){const l=grid.get(Math.floor(x/GRID)+','+Math.floor(z/GRID));if(!l)return -1;for(const i of l){const b=B[i];if(x<b.minx||x>b.maxx||z<b.minz||z>b.maxz)continue;if(pip(x,z,b.pts))return i;}return -1;}
 const PR=.42;
 function blocked(x,z){if(x*x+z*z>(R*.96)**2)return true;return inBuilding(x,z)>=0||inBuilding(x+PR,z)>=0||inBuilding(x-PR,z)>=0||inBuilding(x,z+PR)>=0||inBuilding(x,z-PR)>=0;}
-function freeNear(x,z){if(!blocked(x,z))return [x,z];for(let r=1.5;r<260;r+=1.5){const n=Math.max(12,Math.round(r));for(let a=0;a<n;a++){const t=a/n*Math.PI*2,X=x+Math.cos(t)*r,Z=z+Math.sin(t)*r;if(!blocked(X,Z))return [X,Z];}}return [x,z];}
+const roomy=(x,z,r=2.5)=>!blocked(x,z)&&inBuilding(x+r,z)<0&&inBuilding(x-r,z)<0&&inBuilding(x,z+r)<0&&inBuilding(x,z-r)<0&&inBuilding(x+r*.7,z+r*.7)<0&&inBuilding(x-r*.7,z-r*.7)<0&&inBuilding(x+r*.7,z-r*.7)<0&&inBuilding(x-r*.7,z+r*.7)<0;
+// spawn/teleport spot with a few metres of room, so the camera never starts against a wall
+function freeNear(x,z){if(roomy(x,z))return [x,z];for(let r=1.5;r<260;r+=1.5){const n=Math.max(12,Math.round(r));for(let a=0;a<n;a++){const t=a/n*Math.PI*2,X=x+Math.cos(t)*r,Z=z+Math.sin(t)*r;if(roomy(X,Z))return [X,Z];}}return freeNear0(x,z);}
+function freeNear0(x,z){if(!blocked(x,z))return [x,z];for(let r=1.5;r<260;r+=1.5){const n=Math.max(12,Math.round(r));for(let a=0;a<n;a++){const t=a/n*Math.PI*2,X=x+Math.cos(t)*r,Z=z+Math.sin(t)*r;if(!blocked(X,Z))return [X,Z];}}return [x,z];}
 function isCampus(x,z){if(!CAMPUS.length)return x*x+z*z<300*300;for(const c of CAMPUS)if(pip(x,z,c.pts))return true;return false;}
 function heightOf(t,campus,a){
   if(t.height){const h=parseFloat(t.height);if(isFinite(h)&&h>2&&h<320)return h;}
@@ -497,7 +500,7 @@ function buildBuildings(D){
       const P=[[x1,base,z1],[x2,base,z2],[x2,top,z2],[x1,top,z1]],U=[[u0,v0],[u1,v0],[u1,v1],[u0,v1]];
       for(const k of [0,1,2,0,2,3]){A.p.push(...P[k]);A.n.push(nx,0,nz);A.u.push(...U[k]);A.c.push(tint.r,tint.g,tint.b);}
       if(!longest||L>longest.L)longest={L,x1,z1,x2,z2,nx,nz};
-      {const o=.07,y1=Math.max(heightAt(x1,z1),heightAt(x2,z2))+.85,Pp=[[x1+nx*o,base,z1+nz*o],[x2+nx*o,base,z2+nz*o],[x2+nx*o,y1,z2+nz*o],[x1+nx*o,y1,z1+nz*o]];
+      {const o=.1,y1=Math.max(heightAt(x1,z1),heightAt(x2,z2))+.85,Pp=[[x1+nx*o,base,z1+nz*o],[x2+nx*o,base,z2+nz*o],[x2+nx*o,y1,z2+nz*o],[x1+nx*o,y1,z1+nz*o]];
         for(const k of [0,1,2,0,2,3]){plinth.p.push(...Pp[k]);plinth.n.push(nx,0,nz);plinth.c.push(pcol.r,pcol.g,pcol.b);}}
       const pc=new THREE.Color(PAR_C[kind]);const Q=[[x1,top,z1],[x2,top,z2],[x2,top+.9,z2],[x1,top+.9,z1]];
       for(const k of [0,1,2,0,2,3]){par.p.push(...Q[k]);par.n.push(nx,0,nz);par.c.push(pc.r,pc.g,pc.b);}
@@ -684,8 +687,9 @@ function loop(){
   want.y=Math.max(want.y,heightAt(want.x,want.z)+1.2);
   // keep the camera out of buildings: walk from the player toward the camera and stop just before a wall
   {const sx=want.x-S.x,sy=want.y-ty,sz=want.z-S.z,L=Math.hypot(sx,sz);
-   for(let d=1;d<L;d+=.5){const f=d/L,x=S.x+sx*f,z=S.z+sz*f,y=ty+sy*f,i=inBuilding(x,z);
-     if(i>=0&&y<B[i].top+1.2){const g=Math.max(.15,(d-.8)/L);want.set(S.x+sx*g,Math.max(ty+sy*g,heightAt(S.x+sx*g,S.z+sz*g)+1.2),S.z+sz*g);if(camPos)camPos.copy(want);break;}}}
+   const hitAt=(x,z,y)=>{for(const [ox,oz] of [[0,0],[.7,0],[-.7,0],[0,.7],[0,-.7]]){const i=inBuilding(x+ox,z+oz);if(i>=0&&y<B[i].top+1.2)return true;}return false;};
+   for(let d=.5;d<L;d+=.4){const f=d/L,x=S.x+sx*f,z=S.z+sz*f,y=ty+sy*f;
+     if(hitAt(x,z,y)){const g=Math.max(.12,(d-1)/L);want.set(S.x+sx*g,Math.max(ty+sy*g,heightAt(S.x+sx*g,S.z+sz*g)+1.2),S.z+sz*g);if(camPos)camPos.copy(want);break;}}}
   if(!camPos)camPos=want.clone();else camPos.lerp(want,Math.min(1,dt*8));
   cam.position.copy(camPos);cam.lookAt(S.x,ty,S.z);
   sun.position.set(S.x+SUN_DIR.x*400,gy+SUN_DIR.y*400,S.z+SUN_DIR.z*400);sun.target.position.set(S.x,gy,S.z);
