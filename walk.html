@@ -682,6 +682,10 @@ function loop(){
   const cp=Math.cos(S.pitch),ty=gy+1.5;
   want.set(S.x+Math.sin(S.yaw)*S.dist*cp,ty+Math.sin(S.pitch)*S.dist,S.z+Math.cos(S.yaw)*S.dist*cp);
   want.y=Math.max(want.y,heightAt(want.x,want.z)+1.2);
+  // keep the camera out of buildings: walk from the player toward the camera and stop just before a wall
+  {const sx=want.x-S.x,sy=want.y-ty,sz=want.z-S.z,L=Math.hypot(sx,sz);
+   for(let d=1;d<L;d+=.5){const f=d/L,x=S.x+sx*f,z=S.z+sz*f,y=ty+sy*f,i=inBuilding(x,z);
+     if(i>=0&&y<B[i].top+1.2){const g=Math.max(.15,(d-.8)/L);want.set(S.x+sx*g,Math.max(ty+sy*g,heightAt(S.x+sx*g,S.z+sz*g)+1.2),S.z+sz*g);if(camPos)camPos.copy(want);break;}}}
   if(!camPos)camPos=want.clone();else camPos.lerp(want,Math.min(1,dt*8));
   cam.position.copy(camPos);cam.lookAt(S.x,ty,S.z);
   sun.position.set(S.x+SUN_DIR.x*400,gy+SUN_DIR.y*400,S.z+SUN_DIR.z*400);sun.target.position.set(S.x,gy,S.z);
