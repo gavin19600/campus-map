@@ -721,9 +721,9 @@ function loop(){
   requestAnimationFrame(loop);const dt=Math.min(.05,clock.getDelta());frame++;
   let f=(keys.f?1:0)-(keys.b?1:0)-jy,s=(keys.r?1:0)-(keys.l?1:0)+jx;const mag=Math.min(1,Math.hypot(f,s));
   if(mag>.08&&!S.over){const k=Math.max(1,Math.hypot(f,s));f/=k;s/=k;const sy=Math.sin(S.yaw),cy=Math.cos(S.yaw);const vx=-sy*f+cy*s,vz=-cy*f-sy*s;
-    const run=S.run||keys.shift||Math.hypot(jx,jy)>.95;const sp=(run?8.5:4.2)*dt*Math.max(.35,mag);const nx=S.x+vx*sp,nz=S.z+vz*sp;
+    const run=S.run||keys.shift||Math.hypot(jx,jy)>.95;const sp=(run?24:11)*dt*Math.max(.35,mag);const nx=S.x+vx*sp,nz=S.z+vz*sp;
     if(!blocked(nx,nz)){S.x=nx;S.z=nz;}else if(!blocked(nx,S.z))S.x=nx;else if(!blocked(S.x,nz))S.z=nz;
-    let d=Math.atan2(vx,vz)-me.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d));me.rotation.y+=d*Math.min(1,dt*12);S.walkT+=dt*(run?13:8.5);S.speed=1;}
+    let d=Math.atan2(vx,vz)-me.rotation.y;d=Math.atan2(Math.sin(d),Math.cos(d));me.rotation.y+=d*Math.min(1,dt*12);S.walkT+=dt*(run?19:13);S.speed=1;}
   else S.speed=Math.max(0,S.speed-dt*4);
   const sw=Math.sin(S.walkT)*.6*S.speed,U=me.userData;U.legs[0].rotation.x=sw;U.legs[1].rotation.x=-sw;U.arms[0].rotation.x=-sw*.8;U.arms[1].rotation.x=sw*.8;
   const gy=heightAt(S.x,S.z);me.position.set(S.x,gy+Math.abs(Math.sin(S.walkT))*.05*S.speed,S.z);
