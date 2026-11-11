@@ -31,10 +31,12 @@ function slim(j) {
   }) };
 }
 
-async function fetchOne(lat, lon) {
+async function fetchOne(lat, lon, first) {
+  // each worker starts with its own server so two can run side by side without doubling the load on one
+  const eps = EPS.slice(first % EPS.length).concat(EPS.slice(0, first % EPS.length));
   let last;
   for (let round = 0; round < 3; round++) {
-    for (const ep of EPS) {
+    for (const ep of eps) {
       try {
         const r = await fetch(ep, { method: 'POST', body: 'data=' + encodeURIComponent(query(lat, lon)),
           headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'User-Agent': 'campus-map-bake (github.com/gavin19600/campus-map)' },
@@ -55,18 +57,22 @@ const schools = JSON.parse(fs.readFileSync('tools/schools.json', 'utf8'));
 const max = +process.argv[2] || 25;
 fs.mkdirSync('data', { recursive: true });
 let done = 0, failed = 0;
-for (const [name, lat, lon] of schools) {
-  const file = `data/${lat.toFixed(4)}_${lon.toFixed(4)}.json`;
-  if (fs.existsSync(file)) continue;
-  if (done >= max) break;
-  try {
-    const j = slim(await fetchOne(lat, lon));
-    fs.writeFileSync(file, JSON.stringify(j));
-    done++;
-    console.log(`ok   ${name}  ${j.elements.length} elements`);
-  } catch (e) { failed++; console.log(`FAIL ${name}  ${e.message}`); }
-  await sleep(3000);
+const fileOf = ([, lat, lon]) => `data/${lat.toFixed(4)}_${lon.toFixed(4)}.json`;
+const todo = schools.filter(s => !fs.existsSync(fileOf(s))).slice(0, max);
+async function worker(i) {
+  for (;;) {
+    const s = todo.shift();
+    if (!s) return;
+    try {
+      const j = slim(await fetchOne(s[1], s[2], i));
+      fs.writeFileSync(fileOf(s), JSON.stringify(j));
+      done++;
+      console.log(`ok   ${s[0]}  ${j.elements.length} elements`);
+    } catch (e) { failed++; console.log(`FAIL ${s[0]}  ${e.message}`); }
+    await sleep(3000);
+  }
 }
+await Promise.all([worker(0), worker(1)]);
 const left = schools.filter(([, lat, lon]) => !fs.existsSync(`data/${lat.toFixed(4)}_${lon.toFixed(4)}.json`)).length;
 console.log(`this run: ${done} saved, ${failed} failed, ${left} still missing`);
 fs.writeFileSync(process.env.GITHUB_OUTPUT || '/dev/null', `left=${left}\nsaved=${done}\n`, { flag: 'a' });
