@@ -3,11 +3,12 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<title>캠퍼스 지도</title>
+<title>캠퍼스 산책</title>
 <meta name="description" content="전국 4년제 대학 231곳을 실제 지형과 건물 3D 위에서 찾아보는 예비 대학생용 지도">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=IBM+Plex+Sans+KR:wght@400;500;600&family=Nanum+Myeongjo:wght@700;800&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
 <style>
 /* Layout: 왼쪽은 브이월드 실사 3D 지도, 오른쪽은 색인(검색·목록·학교 카드). 휴대폰에서는 위아래로 쌓음. */
 :root{
@@ -108,6 +109,22 @@ ul.list li button[aria-current="true"]{background:var(--land-hi)}
   .scroll{overflow:visible}
   .legend{font-size:.68rem;bottom:30px}
 }
+
+/* soft theme: warm paper, rounded shapes, friendly type */
+:root{--paper:#FFF8EF;--land:#FFFFFF;--land-hi:#FFEBD2;--sea:#D6ECF5;--ink:#2B2A33;--muted:#6F6A7A;--line:#EFDFCA;--panel:#FFFCF7;--accent:#FF8A65;--accent-ink:#40160A;--pin-pub:#3F6FE0;--pin-pri:#7C6CE8;--pin-edu:#E0962A;--pin-sci:#17A887;--shadow:0 2px 0 rgba(60,40,20,.04),0 10px 28px rgba(120,80,40,.12);--f-display:"Jua","Apple SD Gothic Neo","Malgun Gothic",sans-serif;--f-body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;}
+@media (prefers-color-scheme: dark){:root{--paper:#1F1B24;--land:#2A2531;--land-hi:#3A3144;--sea:#161C26;--ink:#F4EEF8;--muted:#B3A9BF;--line:#3D3547;--panel:#241F2B;--accent:#FF9B7A;--accent-ink:#2A0F06;--pin-pub:#8FB0FF;--pin-pri:#B8ADFF;--pin-edu:#F5BE5E;--pin-sci:#5FDDBF;--shadow:0 1px 2px rgba(0,0,0,.3),0 10px 28px rgba(0,0,0,.4);}}
+header.top{border-bottom:0;align-items:center;background:linear-gradient(180deg,var(--land-hi),var(--paper))}
+header.top h1{font-weight:400;font-size:1.7rem;color:var(--accent);letter-spacing:0}
+header.top .sub{font-size:.9rem}
+.card{border-radius:22px;border-color:var(--line);box-shadow:var(--shadow)}
+.card h2{font-weight:400;font-size:1.5rem}
+.btn{border-radius:999px;padding:8px 14px}
+.btn.primary{font-weight:400;font-family:var(--f-display);font-size:.95rem;box-shadow:0 3px 0 color-mix(in srgb,var(--accent) 70%,#000)}
+.chip{padding:5px 13px;background:var(--land)}
+.search{border-radius:999px;padding:2px 14px}
+ul.list li button{border-radius:14px}
+.zoom button,.legend,.hint{border-radius:16px}
+aside.panel{border-left:0;box-shadow:-8px 0 24px rgba(120,80,40,.06)}
 </style>
 <script src="config.js"></script>
 <script src="kakao-config.js"></script>
@@ -125,8 +142,8 @@ ul.list li button[aria-current="true"]{background:var(--land-hi)}
 <body>
 <div class="app">
   <header class="top">
-    <h1>캠퍼스 지도</h1>
-    <span class="sub">전국 4년제 대학 <b id="total">0</b>곳 · 실제 지형과 건물 3D</span>
+    <h1>캠퍼스 산책</h1>
+    <span class="sub">가고 싶은 대학을 미리 걸어 보세요 · 전국 4년제 대학 <b id="total">0</b>곳 · 실제 지형과 건물 3D</span>
   </header>
   <div class="mapwrap">
     <div id="vmap"></div>

@@ -17,6 +17,7 @@
   "postprocessing":"./pp-stub.js"
 }}
 </script>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Jua&display=swap">
 <style>
 /* Layout: full-screen 3D campus; thin top bar, minimap top-right, joystick bottom-left, place list as a side sheet. */
 :root{
@@ -85,13 +86,18 @@ button,a{font:inherit;color:inherit}
 body.over .joy,body.over #runBtn{display:none}
 .vid{position:relative;aspect-ratio:16/9;background:#000;border-radius:8px;overflow:hidden}.vid iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .adm{display:grid;gap:6px;padding:12px;border-bottom:1px solid var(--line)}.adm .btn{justify-content:flex-start;text-decoration:none}.adm span{font-size:.72rem;color:var(--muted,#667)}
+
+/* soft theme */
+:root{--accent:#FF8A65;--accent-ink:#40160A;--f-display:"Jua","Apple SD Gothic Neo","Malgun Gothic",sans-serif;--f-body:"Gowun Dodum","Apple SD Gothic Neo","Malgun Gothic",system-ui,sans-serif;}
+.btn{border-radius:999px}
+.title b,.places header b,#loadTitle{font-weight:400}
 </style>
 <script src="videos.js"></script>
 </head>
 <body>
 <canvas id="c" aria-label="3D 캠퍼스"></canvas>
 <div class="top">
-  <a class="btn" href="./">← 지도</a>
+  <a class="btn" href="./">← 전국 지도</a>
   <div class="title"><b id="name">캠퍼스</b><span id="sub">건물 정보를 받는 중</span></div>
   <button class="btn" id="admBtn">영상·입시</button>
   <button class="btn" id="placesBtn">가 볼 곳</button>
@@ -712,10 +718,10 @@ function goTo(x,z,fx,fz){const p=freeNear(x,z);S.x=p[0];S.z=p[1];if(fx!==undefin
 function goToBuilding(b){fadeTo(()=>{if(S.over)setMode(false);const dx=S.x-b.ce[0],dz=S.z-b.ce[1],L=Math.hypot(dx,dz)||1;goTo(b.ce[0]+dx/L*(b.rad+4),b.ce[1]+dz/L*(b.rad+4),b.ce[0],b.ce[1]);});}
 $('placesBtn').onclick=()=>{$('places').hidden=!$('places').hidden;};
 $('admBtn').onclick=()=>{$('places').hidden=false;$('places').scrollTop=0;};
-{const V=window.VIDEOS||{},k=Object.keys(V).find(k=>NAME.startsWith(k)),b=$('vidBtn');
+{const V=window.VIDEOS||{},k=Object.keys(V).filter(k=>NAME.startsWith(k)).sort((a,b)=>b.length-a.length)[0],b=$('vidBtn');
   if(k&&/^[\w-]{11}$/.test(V[k])){b.removeAttribute('target');b.onclick=e=>{e.preventDefault();const x=$('vidBox');x.hidden=false;
       x.innerHTML='<iframe allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="홍보 영상" src="https://www.youtube-nocookie.com/embed/'+V[k]+'?autoplay=1&rel=0"></iframe>';};}
-  else b.href='https://www.youtube.com/results?search_query='+encodeURIComponent(NAME+' 홍보영상');}
+  else{b.hidden=true;b.previousElementSibling.hidden=true;}} // no official video found: no button
 $('admSchool').href='https://search.naver.com/search.naver?query='+encodeURIComponent(NAME+' 입학처');
 $('placesClose').onclick=()=>{$('places').hidden=true;};
 function fillPlaces(list){
