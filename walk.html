@@ -83,6 +83,7 @@ button,a{font:inherit;color:inherit}
 @media (hover:hover) and (pointer:fine){.joy{opacity:.5}}
 @media (prefers-reduced-motion:reduce){.bar i{animation:none;width:100%}.fader{transition:none}}
 body.over .joy,body.over #runBtn{display:none}
+.adm{display:grid;gap:6px;padding:12px;border-bottom:1px solid var(--line)}.adm .btn{justify-content:flex-start;text-decoration:none}.adm span{font-size:.72rem;color:var(--muted,#667)}
 </style>
 </head>
 <body>
@@ -90,6 +91,7 @@ body.over .joy,body.over #runBtn{display:none}
 <div class="top">
   <a class="btn" href="./">← 지도</a>
   <div class="title"><b id="name">캠퍼스</b><span id="sub">건물 정보를 받는 중</span></div>
+  <button class="btn" id="admBtn">입시·학과</button>
   <button class="btn" id="placesBtn">가 볼 곳</button>
 </div>
 <canvas id="mini" aria-label="미니맵: 누르면 그 자리로 이동"></canvas>
@@ -104,6 +106,13 @@ body.over .joy,body.over #runBtn{display:none}
 </div>
 <aside class="places" id="places" hidden>
   <header><b>가 볼 곳</b><button class="btn" id="placesClose">닫기</button></header>
+  <div class="adm" id="adm">
+    <b>입시·학과 정보</b>
+    <a class="btn" id="admSchool" target="_blank" rel="noopener">이 학교 입학처 찾기</a>
+    <a class="btn" href="https://www.adiga.kr" target="_blank" rel="noopener">대학어디가 · 입시 결과</a>
+    <a class="btn" href="https://www.academyinfo.go.kr" target="_blank" rel="noopener">대학알리미 · 학과·취업률·등록금</a>
+    <span>공식 사이트가 새 창으로 열립니다. 대학어디가와 대학알리미에서는 학교 이름으로 검색하세요.</span>
+  </div>
   <ul id="placeList"></ul>
 </aside>
 <div class="attr">건물·길 <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">© OpenStreetMap 기여자</a> · 지형 AWS Terrain Tiles</div>
@@ -696,6 +705,8 @@ function fadeTo(fn){const f=$('fader');f.classList.add('on');setTimeout(()=>{fn(
 function goTo(x,z,fx,fz){const p=freeNear(x,z);S.x=p[0];S.z=p[1];if(fx!==undefined){const dx=fx-S.x,dz=fz-S.z;S.yaw=Math.atan2(-dx,-dz);me.rotation.y=Math.atan2(dx,dz);}camPos=null;}
 function goToBuilding(b){fadeTo(()=>{if(S.over)setMode(false);const dx=S.x-b.ce[0],dz=S.z-b.ce[1],L=Math.hypot(dx,dz)||1;goTo(b.ce[0]+dx/L*(b.rad+4),b.ce[1]+dz/L*(b.rad+4),b.ce[0],b.ce[1]);});}
 $('placesBtn').onclick=()=>{$('places').hidden=!$('places').hidden;};
+$('admBtn').onclick=()=>{$('places').hidden=false;$('places').scrollTop=0;};
+$('admSchool').href='https://search.naver.com/search.naver?query='+encodeURIComponent(NAME+' 입학처');
 $('placesClose').onclick=()=>{$('places').hidden=true;};
 function fillPlaces(list){
   const ul=$('placeList');ul.textContent='';

@@ -521,6 +521,9 @@ function select(i,fromMap){
       <button class="btn" id="goFly">하늘에서 보기</button>
       <a class="btn" href="${kakao}" target="_blank" rel="noopener">카카오맵</a>
       <a class="btn" href="${naver}" target="_blank" rel="noopener">네이버 지도</a>
+      <a class="btn" href="https://search.naver.com/search.naver?query=${encodeURIComponent(u.name+' 입학처')}" target="_blank" rel="noopener">입학처 찾기</a>
+      <a class="btn" href="https://www.adiga.kr" target="_blank" rel="noopener">대학어디가(입시 결과)</a>
+      <a class="btn" href="https://www.academyinfo.go.kr" target="_blank" rel="noopener">대학알리미(학과·취업률)</a>
     </div>
   </article>`;
   slot.querySelectorAll('.sib').forEach(a=>a.onclick=e=>{e.preventDefault();select(+a.dataset.go,false);});
