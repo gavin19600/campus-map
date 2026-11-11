@@ -7,7 +7,7 @@ window.admLinks = function(name, branch){
   var base = Object.keys(window.ADM).filter(function(k){return k.indexOf('#')<0 && name.indexOf(k)===0;}).sort(function(a,b){return b.length-a.length;})[0];
   var e = base && ((branch && window.ADM[base+'#2']) || window.ADM[base]);
   var a = function(h,t){return '<a class="btn" href="'+h+'" target="_blank" rel="noopener">'+t+'</a>';};
-  if(!e) return a('https://search.naver.com/search.naver?query='+encodeURIComponent(name+' 입학처'),'입학처 찾기')+a('https://www.adiga.kr','대학어디가');
+  if(!e) return a('https://search.naver.com/search.naver?query='+encodeURIComponent(name+' 입학처'),'입학처 찾기')+a('https://www.adiga.kr/man/sch/searchView.do?menuId=PCMANSCH5001&checkMiss=1&search='+encodeURIComponent(name.replace(/ (분교|제\d캠퍼스)$/,'')),'대학어디가에서 이 학교 보기');
   var cd=('0000000'+e[0]).slice(-7), ad='https://www.adiga.kr/uct/acd/ade/criteriaAndResultPopup.do?unvCd='+cd+'&tsrdCmphSlcnArtclUpCd=10&searchSyr=';
   return a('https://'+e[1],'입학처 홈페이지')+a(ad+'2027','2026학년도 입시 결과 (대학어디가)')+a(ad+'2026','2025학년도 입시 결과 (대학어디가)');
 };
