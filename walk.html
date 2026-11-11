@@ -195,8 +195,10 @@ async function getOSM(){
   // older copies (osm3/osm4) cover a smaller area, so they are dropped rather than reused
   try{for(const k of Object.keys(localStorage))if(/^osm[34]:/.test(k))localStorage.removeItem(k);}catch(e){}
   try{const c=localStorage.getItem(key);if(c)return JSON.parse(c);}catch(e){}
+  // a copy prepared in advance and stored with the site opens at once, without asking the map servers
+  try{const r=await fetch('data/'+LAT.toFixed(4)+'_'+LON.toFixed(4)+'.json');if(r.ok){const j=await r.json();if(j&&Array.isArray(j.elements))return j;}}catch(e){}
   const t0=Date.now();
-  const tick=setInterval(()=>status(`OpenStreetMap에서 건물과 길 정보를 받는 중입니다… ${Math.round((Date.now()-t0)/1000)}초 (보통 20초~1분, 한 번 받으면 다음엔 바로 열려요)`),1000);
+  const tick=setInterval(()=>status(`OpenStreetMap에서 건물과 길 정보를 받는 중입니다… ${Math.round((Date.now()-t0)/1000)}초 (한 번 받으면 다음엔 바로 열려요)`),1000);
   // all servers are tried at once; if every one fails (they are often briefly busy), try one more round
   let res;
   try{
