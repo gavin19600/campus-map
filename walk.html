@@ -707,7 +707,7 @@ function setMode(over){
   if(aoPass)Object.assign(aoPass.configuration,over?{aoRadius:14,distanceFalloff:1,intensity:3.2}:{aoRadius:3.2,distanceFalloff:1.2,intensity:2.6});
   me.visible=!over;camPos=null;
   if(over)for(const l of labels)l.s.visible=!!l.top;
-  const h=$('hint');h.hidden=false;h.classList.remove('fade');h.textContent=over?'끌어서 돌려 보기 · 휠·두 손가락으로 확대 · ‘걸어서 들어가기’로 캠퍼스 산책':'WASD·방향키로 걷기 · 화면을 끌어 둘러보기 · Shift 달리기';
+  const h=$('hint');h.hidden=false;h.classList.remove('fade');h.textContent=over?'끌어서 돌려 보기 · 휠·두 손가락으로 확대 · ‘걸어서 들어가기’로 캠퍼스 투어':'WASD·방향키로 걷기 · 화면을 끌어 둘러보기 · Shift 달리기';
   clearTimeout(setMode.t);setMode.t=setTimeout(()=>h.classList.add('fade'),7000);
 }
 $('viewBtn').onclick=()=>setMode(!S.over);
