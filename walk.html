@@ -83,15 +83,17 @@ button,a{font:inherit;color:inherit}
 @media (hover:hover) and (pointer:fine){.joy{opacity:.5}}
 @media (prefers-reduced-motion:reduce){.bar i{animation:none;width:100%}.fader{transition:none}}
 body.over .joy,body.over #runBtn{display:none}
+.vid{position:relative;aspect-ratio:16/9;background:#000;border-radius:8px;overflow:hidden}.vid iframe{position:absolute;inset:0;width:100%;height:100%;border:0}
 .adm{display:grid;gap:6px;padding:12px;border-bottom:1px solid var(--line)}.adm .btn{justify-content:flex-start;text-decoration:none}.adm span{font-size:.72rem;color:var(--muted,#667)}
 </style>
+<script src="videos.js"></script>
 </head>
 <body>
 <canvas id="c" aria-label="3D 캠퍼스"></canvas>
 <div class="top">
   <a class="btn" href="./">← 지도</a>
   <div class="title"><b id="name">캠퍼스</b><span id="sub">건물 정보를 받는 중</span></div>
-  <button class="btn" id="admBtn">입시·학과</button>
+  <button class="btn" id="admBtn">영상·입시</button>
   <button class="btn" id="placesBtn">가 볼 곳</button>
 </div>
 <canvas id="mini" aria-label="미니맵: 누르면 그 자리로 이동"></canvas>
@@ -107,6 +109,9 @@ body.over .joy,body.over #runBtn{display:none}
 <aside class="places" id="places" hidden>
   <header><b>가 볼 곳</b><button class="btn" id="placesClose">닫기</button></header>
   <div class="adm" id="adm">
+    <b>홍보 영상</b>
+    <a class="btn" id="vidBtn" href="#" target="_blank" rel="noopener">▶ 홍보 영상 보기</a>
+    <div class="vid" id="vidBox" hidden></div>
     <b>입시·학과 정보</b>
     <a class="btn" id="admSchool" target="_blank" rel="noopener">이 학교 입학처 찾기</a>
     <a class="btn" href="https://www.adiga.kr" target="_blank" rel="noopener">대학어디가 · 입시 결과</a>
@@ -665,6 +670,7 @@ const me=makeStudent();scene.add(me);
 /* ---------- input ---------- */
 const S={x:0,z:0,yaw:0,pitch:.42,dist:14,run:false,over:true,walkT:0,speed:0};
 const O={yaw:.7,pitch:.6,dist:R*1.45,touched:false}; // whole-campus view
+let LM=null; // best-known place on campus: the first thing shown
 const V=()=>S.over?O:S,DMAX=()=>S.over?R*3:120,DMIN=()=>S.over?160:3.5;
 const keys={};const KM={KeyW:'f',ArrowUp:'f',KeyS:'b',ArrowDown:'b',KeyA:'l',ArrowLeft:'l',KeyD:'r',ArrowRight:'r'};
 addEventListener('keydown',e=>{if(e.key==='Shift')keys.shift=true;const k=KM[e.code];if(k){keys[k]=true;e.preventDefault();}});
@@ -706,6 +712,10 @@ function goTo(x,z,fx,fz){const p=freeNear(x,z);S.x=p[0];S.z=p[1];if(fx!==undefin
 function goToBuilding(b){fadeTo(()=>{if(S.over)setMode(false);const dx=S.x-b.ce[0],dz=S.z-b.ce[1],L=Math.hypot(dx,dz)||1;goTo(b.ce[0]+dx/L*(b.rad+4),b.ce[1]+dz/L*(b.rad+4),b.ce[0],b.ce[1]);});}
 $('placesBtn').onclick=()=>{$('places').hidden=!$('places').hidden;};
 $('admBtn').onclick=()=>{$('places').hidden=false;$('places').scrollTop=0;};
+{const V=window.VIDEOS||{},k=Object.keys(V).find(k=>NAME.startsWith(k)),b=$('vidBtn');
+  if(k&&/^[\w-]{11}$/.test(V[k])){b.removeAttribute('target');b.onclick=e=>{e.preventDefault();const x=$('vidBox');x.hidden=false;
+      x.innerHTML='<iframe allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="홍보 영상" src="https://www.youtube-nocookie.com/embed/'+V[k]+'?autoplay=1&rel=0"></iframe>';};}
+  else b.href='https://www.youtube.com/results?search_query='+encodeURIComponent(NAME+' 홍보영상');}
 $('admSchool').href='https://search.naver.com/search.naver?query='+encodeURIComponent(NAME+' 입학처');
 $('placesClose').onclick=()=>{$('places').hidden=true;};
 function fillPlaces(list){
@@ -740,7 +750,7 @@ function loop(){
   const gy=heightAt(S.x,S.z);me.position.set(S.x,gy+Math.abs(Math.sin(S.walkT))*.05*S.speed,S.z);
   if(S.over){
     if(!O.touched)O.yaw+=dt*.035;
-    const cl=v=>Math.max(-R*.3,Math.min(R*.3,v)),cx=cl(campusCenter[0]),cz=cl(campusCenter[1]),cy0=heightAt(cx,cz)+10,cp=Math.cos(O.pitch);
+    const cl=v=>Math.max(-R*.3,Math.min(R*.3,v)),cx=LM?LM.ce[0]:cl(campusCenter[0]),cz=LM?LM.ce[1]:cl(campusCenter[1]),cy0=heightAt(cx,cz)+10,cp=Math.cos(O.pitch);
     want.set(cx+Math.sin(O.yaw)*O.dist*cp,cy0+Math.sin(O.pitch)*O.dist,cz+Math.cos(O.yaw)*O.dist*cp);
     if(!camPos)camPos=want.clone();else camPos.lerp(want,Math.min(1,dt*6));
     cam.position.copy(camPos);cam.lookAt(cx,cy0,cz);
@@ -792,9 +802,14 @@ function loop(){
   const nc=B.filter(b=>b.camp).length;
   $('sub').textContent=`캠퍼스 건물 ${nc}동 · 이름 있는 곳 ${named.length}곳${hasTerrain?' · 지형 높이 반영':''}`;
   if(nc<8){const n=$('note');n.hidden=false;n.innerHTML='이 캠퍼스는 OpenStreetMap에 건물이 적게 그려져 있어 일부만 보입니다. 누구나 <a href="https://www.openstreetmap.org" target="_blank" rel="noopener">openstreetmap.org</a>에서 건물을 더할 수 있어요.';}
+  // first view: the place people know the school by, picked from building names (main hall, library, ...)
+  {const pri=[/본관|대학본부|본부/,/중앙도서관/,/도서관/,/대강당|기념관|박물관|학생회관/];
+   for(const re of pri){const c=named.filter(b=>re.test(b.name)).sort((a,b)=>b.rad-a.rad)[0];if(c){LM=c;break;}}
+   if(!LM&&named.length)LM=named.slice().sort((a,b)=>b.rad-a.rad)[0];
+   if(LM){O.dist=Math.max(230,LM.rad*5.5);O.pitch=.5;const l=labels.find(l=>l.b===LM);if(l)l.top=true;}}
   let fx=campusCenter[0],fz=campusCenter[1];
   if(Math.hypot(fx,fz)<20&&named.length){const nb=named.slice().sort((a,b)=>Math.hypot(a.ce[0],a.ce[1])-Math.hypot(b.ce[0],b.ce[1]))[0];fx=nb.ce[0];fz=nb.ce[1];}
-  goTo(0,0,fx,fz);
+  if(LM){const d=Math.hypot(LM.ce[0],LM.ce[1])||1,k=LM.rad+14;goTo(LM.ce[0]-LM.ce[0]/d*k,LM.ce[1]-LM.ce[1]/d*k,LM.ce[0],LM.ce[1]);}else goTo(0,0,fx,fz);
   drawMiniStatic();
   await setupPost();
   setMode(true);
