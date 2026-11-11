@@ -93,6 +93,7 @@ body.over .joy,body.over #runBtn{display:none}
 .title b,.places header b,#loadTitle{font-weight:400}
 </style>
 <script src="videos.js"></script>
+<script src="admissions.js"></script>
 </head>
 <body>
 <canvas id="c" aria-label="3D 캠퍼스"></canvas>
@@ -119,10 +120,10 @@ body.over .joy,body.over #runBtn{display:none}
     <a class="btn" id="vidBtn" href="#" target="_blank" rel="noopener">▶ 홍보 영상 보기</a>
     <div class="vid" id="vidBox" hidden></div>
     <b>입시·학과 정보</b>
-    <a class="btn" id="admSchool" target="_blank" rel="noopener">이 학교 입학처 찾기</a>
-    <a class="btn" href="https://www.adiga.kr" target="_blank" rel="noopener">대학어디가 · 입시 결과</a>
+    <div id="admLinks" style="display:grid;gap:6px"></div>
     <a class="btn" href="https://www.academyinfo.go.kr" target="_blank" rel="noopener">대학알리미 · 학과·취업률·등록금</a>
-    <span>공식 사이트가 새 창으로 열립니다. 대학어디가와 대학알리미에서는 학교 이름으로 검색하세요.</span>
+    <span>공식 사이트가 새 창으로 열립니다.</span>
+    <span>링크 정리: <a href="https://bejewled-begonia-468.notion.site/d3f1e626dc134951af4054eef95be578" target="_blank" rel="noopener">대학 뒤져보기(남악고 김현석 선생님)</a> · <a href="https://www.adiga.kr/mbs/cop/copyrightPolicyView.do?menuId=PCMBSCOP1000" target="_blank" rel="noopener">대학어디가 저작권정책</a></span>
   </div>
   <ul id="placeList"></ul>
 </aside>
@@ -722,7 +723,7 @@ $('admBtn').onclick=()=>{$('places').hidden=false;$('places').scrollTop=0;};
   if(k&&/^[\w-]{11}$/.test(V[k])){b.removeAttribute('target');b.onclick=e=>{e.preventDefault();const x=$('vidBox');x.hidden=false;
       x.innerHTML='<iframe allow="autoplay; encrypted-media; picture-in-picture; fullscreen" allowfullscreen title="홍보 영상" src="https://www.youtube-nocookie.com/embed/'+V[k]+'?autoplay=1&rel=0"></iframe>';};}
   else{b.hidden=true;b.previousElementSibling.hidden=true;}} // no official video found: no button
-$('admSchool').href='https://search.naver.com/search.naver?query='+encodeURIComponent(NAME+' 입학처');
+$('admLinks').innerHTML=window.admLinks?window.admLinks(NAME,/분교|캠퍼스/.test(NAME)):'';
 $('placesClose').onclick=()=>{$('places').hidden=true;};
 function fillPlaces(list){
   const ul=$('placeList');ul.textContent='';
